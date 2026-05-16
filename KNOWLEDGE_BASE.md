@@ -11,7 +11,7 @@
 | CPU | 4 cores |
 | RAM | ~1.8 GB total, ~1 GB available |
 | Disk | ~51 GB available |
-| User | non-root `builder` (UID 1000), passwordless sudo for apt-get |
+| User | root (snapcraft destructive mode requires write access to apt cache) |
 
 ---
 
@@ -81,31 +81,13 @@ apt-get install -y gpg dirmngr ...
 E: Conflicting values set for option Signed-By regarding source http://packages.ros.org/ros2/ubuntu/ noble
 ```
 
-**Fix in Dockerfile:** Convert `ros2.sources` to use a keyring file before snapcraft runs:
-```python
-# Python heredoc in a RUN step
-import re, subprocess, os
+Note: converting the inline PGP block to a keyring file does NOT resolve this — craft_parts still creates its own keyring file with a different path, causing the same conflict between two keyring-file paths.
 
-src = '/etc/apt/sources.list.d/ros2.sources'
-keyring = '/etc/apt/keyrings/ros2-jazzy.gpg'
-
-with open(src) as f:
-    content = f.read()
-
-m = re.search(r'(-----BEGIN PGP PUBLIC KEY BLOCK-----.*?-----END PGP PUBLIC KEY BLOCK-----)',
-              content, re.DOTALL)
-pgp = '\n'.join(line.lstrip(' .') for line in m.group(1).splitlines())
-result = subprocess.run(['gpg', '--dearmor'], input=pgp.encode(), capture_output=True, check=True)
-os.makedirs('/etc/apt/keyrings', exist_ok=True)
-with open(keyring, 'wb') as f:
-    f.write(result.stdout)
-new = re.sub(r'Signed-By:.*?-----END PGP PUBLIC KEY BLOCK-----\n',
-             f'Signed-By: {keyring}\n', content, flags=re.DOTALL)
-with open(src, 'w') as f:
-    f.write(new)
+**Fix in Dockerfile:** Delete `ros2.sources` after the apt install step so craft_parts is the sole owner of the ROS repository at build time:
+```dockerfile
+RUN rm -f /etc/apt/sources.list.d/ros2.sources
 ```
-
-After the fix, apt emits a harmless **warning** about duplicate sources (both files reference the same URL+suite) but no longer errors.
+craft_parts re-adds the ROS repo with its own keyring file when snapcraft runs — no conflict.
 
 ---
 
@@ -163,6 +145,67 @@ cp -r /opt/snapcraft/lib/python3.12/site-packages/extensions/ros2 \
 **Cause:** `rosidl_adapter` (called from the host ROS installation, not the staged env) imports `em`. empy 4.x changed its API and is incompatible with ROS Jazzy's rosidl toolchain.
 
 **Fix:** Pin to `empy<4.0` in the snapcraft venv. The system `python3-empy` (3.3.4) at `/usr/lib/python3/dist-packages/em.py` is also compatible and is the one exposed to the staged python3 via PYTHONPATH.
+
+---
+
+### 6. `osrf/ros:jazzy-desktop-full` is amd64-only — use `ros:jazzy-ros-base`
+
+**Cause:** `osrf/ros:jazzy-desktop-full` only publishes a `linux/amd64` image. On arm64/aarch64 hosts it fails immediately with `exec /ros_entrypoint.sh: exec format error`.
+
+**Fix:** Use `ros:jazzy-ros-base` from the official Docker library — it is a proper multi-arch image (amd64 + arm64). Already pre-installed: `gpg`, `dirmngr`, `python3-empy`, `python3-numpy`.
+
+---
+
+### 7. Non-root user blocked from apt cache — run as root
+
+**Cause:** snapcraft destructive mode calls `apt.cache.Cache(rootdir="/")` (Python-level, not a subprocess) to check whether required packages are installed. This tries to create `/var/lib/apt/lists/partial` and fails for non-root users:
+```
+PermissionError: [Errno 13] Permission denied: '//var/lib/apt/lists/partial'
+```
+
+**Fix:** Run the container as root. Remove the `USER` directive from the Dockerfile. This is a build container — security tradeoffs are acceptable.
+
+Additionally, `ros:jazzy-ros-base` ships with an `ubuntu` user at UID/GID 1000, so `groupadd`/`useradd` with those IDs also fails during image build.
+
+---
+
+### 8. `snap` binary required for both lint and pack — stub with mksquashfs
+
+**Cause:** snapcraft 9.x delegates two operations to the `snap` CLI (part of snapd), which cannot run in a non-privileged container:
+1. `snap pack --check-skeleton <prime>` — pre-pack structural validation
+2. `snap lint <prime>` — metadata/library linting
+3. `snap pack --filename F --compression C <prime> <outdir>` — actual squashfs creation
+
+**Fix:** Install a stub `/usr/local/bin/snap` that:
+- Returns 0 for `lint` and `pack --check-skeleton` (skips validation)
+- Implements `pack` via `mksquashfs` (squashfs-tools already in the image)
+
+```bash
+RUN cat > /usr/local/bin/snap << 'EOF'
+#!/bin/bash
+set -e
+case "$1" in
+  lint) exit 0 ;;
+  pack)
+    shift
+    for arg in "$@"; do [[ "$arg" == --check-skeleton ]] && exit 0; done
+    filename=""; compression="xz"; prime_dir=""; output_dir="."
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --filename)    filename="$2";    shift 2 ;;
+        --compression) compression="$2"; shift 2 ;;
+        --*)           shift ;;
+        *) [[ -z "$prime_dir" ]] && prime_dir="$1" || output_dir="$1"; shift ;;
+      esac
+    done
+    mksquashfs "$prime_dir" "${output_dir}/${filename}" \
+      -noappend -comp "$compression" -no-xattrs -all-root
+    ;;
+  *) exit 0 ;;
+esac
+EOF
+chmod +x /usr/local/bin/snap
+```
 
 ---
 
