@@ -4,17 +4,21 @@ Builds ROS 2 snaps inside Docker using snapcraft in destructive mode. No LXD, no
 
 Supports Jazzy, Humble, and Rolling. Tested on amd64 (arm64 tested for Jazzy).
 
+## Dockerfiles
+
+One Dockerfile per distro: `Dockerfile.jazzy`, `Dockerfile.humble`, `Dockerfile.rolling`.
+
 ## Snaps
 
-| Snap | Source | Jazzy | Humble |
-|------|--------|-------|--------|
-| `ros2-cli` | [canonical/ros2cli-snap](https://github.com/canonical/ros2cli-snap) | 176 MB | 180 MB |
-| `ros2-nav2` | [canonical/ros2-nav2-snap](https://github.com/canonical/ros2-nav2-snap) | 769 MB | - |
-| `ros2-test-pub` | [`snaps/ros2-test-pub*/`](snaps/) | 18 MB | 30 MB |
+| Snap | Source | Jazzy | Humble | Rolling |
+|------|--------|-------|--------|---------|
+| `ros2-cli` | [canonical/ros2cli-snap](https://github.com/canonical/ros2cli-snap) | 176 MB | 180 MB | - |
+| `ros2-nav2` | [canonical/ros2-nav2-snap](https://github.com/canonical/ros2-nav2-snap) | 769 MB | - | - |
+| `ros2-test-pub` | [`snaps/ros2-test-pub*/`](snaps/) | 18 MB | 30 MB | 18 MB |
 
 `ros2-test-pub` variants are minimal publishers used to verify cross-snap ROS 2 communication.
 
-Rolling: Dockerfile works, but there's no `ros-rolling-ros-base` content snap in the store and no `ros2-rolling` extension in snapcraft 9.0. test-pub builds but can't be connected at runtime.
+Rolling builds work but runtime testing is blocked: snapcraft 9.0 has no `ros2-rolling` extension and the Snap Store has no `ros-rolling-ros-base` content snap. `ros2cli-snap` also has no rolling branch. `ros2-test-pub-rolling` packs fine but cannot connect to a content snap at runtime.
 
 ## Requirements
 
