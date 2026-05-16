@@ -2,12 +2,8 @@ name: ros2-test-pub
 version: '0.1'
 summary: ROS 2 Jazzy test publisher snap
 description: |
-  Publishes three topics at 1 Hz for ros2-cli interaction testing:
-    /test/string  — std_msgs/msg/String
-    /test/int32   — std_msgs/msg/Int32
-    /test/twist   — geometry_msgs/msg/Twist
-
-  Run as user (no daemon). ROS libraries sourced from ros-jazzy-ros-base content snap.
+  Test publisher for ros2-cli. Publishes /test/string, /test/int32, and /test/twist
+  at 1 Hz. Needs the ros-jazzy-ros-base content snap connected. Run as a regular user.
 
 base: core24
 confinement: devmode
