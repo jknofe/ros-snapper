@@ -1,106 +1,128 @@
-# TODO for Next Agent — ros2cli Snap Build
+# TODO for Next Agent — ros2cli Snap Build (Docker Daemon Approach)
 
 ## Goal
 Build `ros2-cli_jazzy-dev_arm64.snap` from the `jazzy` branch of
-https://github.com/ros2/ros2cli.git using the **unmodified** canonical snap
-recipe from https://github.com/canonical/ros2cli-snap (only change: `source-branch:
-jazzy` instead of `source-tag: 0.32.1`).
+https://github.com/ros2/ros2cli.git inside a Docker container, then iterate
+on the Dockerfile until the build succeeds.
 
-## Key Insight (do NOT modify the snap recipe)
-All Python module failures (`catkin_pkg`, `em`, `numpy`) during the colcon build
-are caused by the staged python3's isolated `sys.path`. The fix is a single
-environment variable, already set in the Dockerfile and entrypoint.sh:
+## Architecture
 
-```bash
-export PYTHONPATH=/usr/lib/python3/dist-packages
+```
+Host (has Docker)
+  └─ docker build -t ros-snapcraft .        # build image from Dockerfile
+  └─ docker run -d --name ros-snapcraft ... # start container as daemon
+  └─ docker exec ros-snapcraft snapcraft pack  # build the snap inside
+  └─ docker cp ros-snapcraft:/workspace/.../*.snap .  # copy out the result
 ```
 
-The snap recipe's `override-build` is **canonical and unchanged** — no injection
-code needed.
+## Base Image Change
 
-## Current State
+Switch from `ros:jazzy-ros-base` to **`osrf/ros:jazzy-desktop-full`**.
 
-### Build #6 was started at session end
+**Why:** The desktop-full image ships the complete ROS 2 Jazzy stack including
+all message packages, rosidl toolchain, Python tools, and build tools. This
+eliminates the need to download hundreds of stage-packages (the ros2cli_msgs
+meta-package has 165 message deps) and ensures build-tool packages like
+`python3-catkin-pkg`, `python3-empy`, and `python3-numpy` are already present.
+
+The Dockerfile is in `/prpject/Dockerfile` — update the `FROM` line and adjust
+or remove apt installs that are no longer needed.
+
+## Workflow
+
+### 1. Build the Docker image
 ```bash
-# Check the result first:
-ls /workspace/ros2cli-snap-jazzy/*.snap 2>/dev/null
-tail -40 /tmp/snapcraft_build6.log
+cd /prpject
+docker build -t ros-snapcraft .
 ```
 
-### File locations
-| Path | Description |
-|------|-------------|
-| `/prpject/Dockerfile` | Image definition — non-root builder, all env fixes |
-| `/prpject/entrypoint.sh` | Container entrypoint |
-| `/prpject/KNOWLEDGE_BASE.md` | All pitfalls documented |
-| `/workspace/ros2cli-snap-jazzy/` | Build workspace (canonical recipe + `source-branch: jazzy`) |
-| `/workspace/ros2cli-snap-jazzy/snap/snapcraft.yaml` | Snap recipe — verify `override-build` is canonical |
-| `/tmp/snapcraft_build6.log` | Last build log |
-
-### Environment already set up (persistent in this container)
-- snapcraft 9.0.0 installed at `/opt/snapcraft`, symlinked to `/usr/local/bin/`
-- ROS2 apt Signed-By conflict fixed in `/etc/apt/sources.list.d/ros2.sources`
-- `gpg`, `dirmngr`, `python3-catkin-pkg`, `python3-numpy` installed
-- Extensions copied to `/opt/snapcraft/share/snapcraft/extensions/ros2`
-- rosdep initialized and updated
-
-## Steps
-
-### 1. Check build #6 result
+### 2. Start container as daemon
 ```bash
-ls /workspace/ros2cli-snap-jazzy/*.snap 2>/dev/null && echo "SUCCESS" || echo "no snap"
-tail -50 /tmp/snapcraft_build6.log | grep -E "Finished|Failed|Aborted|Summary|EXIT|Packing|Staging"
+docker run -d --name ros-snapcraft \
+  -v /prpject/ros2cli-snap-jazzy:/workspace \
+  ros-snapcraft bash -c "tail -f /dev/null"
 ```
 
-### 2a. If successful
-```bash
-file /workspace/ros2cli-snap-jazzy/*.snap
-unsquashfs -l /workspace/ros2cli-snap-jazzy/*.snap | head -30
-```
-Report success, update KNOWLEDGE_BASE "Caveats" with any remaining notes.
+The snap project lives at `/prpject/ros2cli-snap-jazzy/` on the host
+(already cloned, canonical recipe with `source-branch: jazzy`).
+Mount it into `/workspace` inside the container.
 
-### 2b. If failed — retry with correct environment
+If the directory doesn't exist yet, clone it first:
+```bash
+cd /prpject
+git clone --depth=1 https://github.com/canonical/ros2cli-snap.git ros2cli-snap-jazzy
+# Change source-branch in the snapcraft.yaml:
+sed -i 's/source-tag: .*/source-branch: jazzy/' \
+  ros2cli-snap-jazzy/snap/snapcraft.yaml
+```
+
+### 3. Build the snap
+```bash
+docker exec ros-snapcraft bash -c "
+  source /opt/ros/jazzy/setup.bash &&
+  export SNAPCRAFT_BUILD_ENVIRONMENT=host &&
+  export SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1 &&
+  export PYTHONPATH=/usr/lib/python3/dist-packages &&
+  cd /workspace &&
+  snapcraft pack
+" 2>&1 | tee /tmp/snapcraft_build.log
+```
+
+### 4. On success — copy out the snap
+```bash
+docker cp ros-snapcraft:/workspace/ros2-cli_jazzy-dev_arm64.snap .
+```
+
+### 5. On error — iterate
+- Read the error in `/tmp/snapcraft_build.log`
+- Update `Dockerfile` accordingly
+- Rebuild: `docker stop ros-snapcraft && docker rm ros-snapcraft && docker build -t ros-snapcraft . && docker run ...`
+- For partial failures (colcon phase), use `docker exec` with `snapcraft clean <part>` then retry
+
+## Key Environment Variables (must be set in every exec)
 ```bash
 export SNAPCRAFT_BUILD_ENVIRONMENT=host
 export SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1
 export PYTHONPATH=/usr/lib/python3/dist-packages
 source /opt/ros/jazzy/setup.bash
-
-cd /workspace/ros2cli-snap-jazzy
-
-# Partial clean (keeps cached .deb downloads):
-snapcraft clean ros2cli
-
-# Full rebuild:
-snapcraft pack 2>&1 | tee /tmp/snapcraft_build7.log
 ```
+These are also set as `ENV` in the Dockerfile so the container inherits them.
 
-### 3. If new Python module errors appear
-Check if the missing module is in `/usr/lib/python3/dist-packages`:
+## Current Dockerfile State
+All fixes from prior research are already in `/prpject/Dockerfile`:
+
+| Fix | What it does |
+|-----|-------------|
+| `gpg` + `dirmngr` in apt | craft_parts needs `gpg --dearmor` for repo key install |
+| Python heredoc RUN step | Converts `ros2.sources` inline PGP to keyring file — prevents apt Signed-By conflict |
+| `PYTHONPATH=/usr/lib/python3/dist-packages` | Exposes host catkin_pkg, em, numpy to the isolated staged python3 |
+| `--system-site-packages` venv | Exposes python3-apt (C extension) to the snapcraft venv |
+| Extensions path copy | Fixes pip vs sys.prefix layout mismatch for ros2 extension |
+| `empy<4.0` pinned | ROS Jazzy rosidl toolchain incompatible with empy 4.x |
+| Non-root `builder` user | Runs as UID 1000, passwordless sudo for apt-get |
+
+**With `osrf/ros:jazzy-desktop-full` many of these may become unnecessary** —
+investigate what's already present in the base image and trim the Dockerfile.
+
+## Known Snap Recipe Details
+- Recipe source: https://github.com/canonical/ros2cli-snap
+- Only change from canonical: `source-branch: jazzy` (was `source-tag: 0.32.1`)
+- The `override-build` is canonical — **do not add injection code**
+- All python module availability issues are fixed via PYTHONPATH, not recipe changes
+
+## Investigating the Base Image
 ```bash
-python3 -c "import <module>; print('found')"
-```
-If yes: PYTHONPATH already covers it — the staged python3 will find it automatically.
-If no: install it via apt (`python3-<name>`) and it will be available via PYTHONPATH.
-Do NOT modify the snap recipe.
-
-### 4. If non-Python errors appear
-Read the full colcon log:
-```bash
-cat /root/.local/state/snapcraft/log/snapcraft-*.log | tail -100
-find /workspace/ros2cli-snap-jazzy/parts/ros2cli/build -name "*.log" | \
-  xargs grep -l "Error\|error" 2>/dev/null | head -5
+docker run --rm osrf/ros:jazzy-desktop-full bash -c "
+  dpkg -l python3-catkin-pkg python3-numpy python3-empy python3-apt gpg 2>/dev/null | grep '^ii' | awk '{print \$2}'
+  echo '---'
+  python3 -c 'import catkin_pkg, em, numpy; print(\"All OK\")'
+"
 ```
 
-### 5. OOM during colcon (4 cores, ~1 GB RAM)
-Add `--parallel-workers 1` to the colcon invocation. In snapcraft.yaml this is
-done via `colcon-cmake-args` — but try with the default 4 workers first.
+## Updating Files in This Repo
+All edits to `/prpject/**` are pre-approved (no permission prompts).
+All `docker exec` and `docker build/run/cp` commands are pre-approved.
 
-## Verification of the PYTHONPATH fix
-```bash
-# Should print "ALL OK" — if not, PYTHONPATH isn't set
-PYTHONPATH=/usr/lib/python3/dist-packages \
-  /workspace/ros2cli-snap-jazzy/parts/ros2cli/install/usr/bin/python3 \
-  -c "import catkin_pkg, em, numpy; print('ALL OK')" 2>&1
-```
-(The staged python3 path only exists after `snapcraft pull` or a previous build attempt.)
+After each Dockerfile change, commit with a short message describing what was fixed.
+After a successful build, update `KNOWLEDGE_BASE.md` with the final working setup
+and remove or archive this TODO file.
