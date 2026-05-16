@@ -66,11 +66,12 @@ make build-test-pub   → *_arm64     make build-test-pub   → *_amd64
 
 `ros:jazzy-ros-base` gives us a full ROS 2 Jazzy environment. On top of it, the Dockerfile:
 
-1. Installs system packages needed by snapcraft (gpg, squashfs-tools, python3-apt, …)
+1. Installs system packages needed by snapcraft (gpg, squashfs-tools, snapd, python3-apt, …)
 2. Removes the conflicting ROS apt source (`ros2.sources`) so craft_parts can own it
 3. Installs snapcraft 9.x from GitHub (PyPI only has 4.x)
-4. Stubs out the `snap` binary with a mksquashfs wrapper (snapd can't run unprivileged)
-5. Sets `SNAPCRAFT_BUILD_ENVIRONMENT=host` to use destructive mode
+4. Sets `SNAPCRAFT_BUILD_ENVIRONMENT=host` to use destructive mode
+
+`snap pack` (called internally by snapcraft) is self-contained in the `snap` binary and needs no running daemon — it shells out to `mksquashfs` from PATH. Installing the `snapd` package is sufficient.
 
 See [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md) for the full list of pitfalls and fixes.
 
