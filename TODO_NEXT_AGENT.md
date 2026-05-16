@@ -1,156 +1,167 @@
-# TODO for Next Agent — Build ROS 2 Jazzy Snaps
+# TODO for Next Agent — Multi-Arch Docker Image (arm64 + amd64)
+
+## Background
+
+Both target snaps already build successfully on **arm64**:
+
+| Snap | File | Size | Status |
+|------|------|------|--------|
+| `ros2-cli` | `ros2-cli_0.32.1_arm64.snap` | 168 MB | ✓ built |
+| `ros2-nav2` | `ros2-nav2_1.3.11_arm64.snap` | 661 MB | ✓ built |
+
+The Dockerfile, all pitfalls, and the complete fix history are in `KNOWLEDGE_BASE.md`.
+The working Dockerfile is in this repo root.
+
+---
 
 ## Goal
-Build the following ROS 2 Jazzy snaps inside a Docker container, iterating
-on the Dockerfile until every snap builds successfully:
 
-| # | Repo | Snap name | Branch |
-|---|------|-----------|--------|
-| 1 | https://github.com/canonical/ros2cli-snap.git | `ros2-cli` | `jazzy` |
-| 2 | https://github.com/canonical/ros2-nav2-snap.git | `ros2-nav2` | `jazzy` |
+Extend the build to produce **amd64 snaps** as well, by making the Docker image
+build for both platforms.
 
-These are the two test examples. The Dockerfile, tooling knowledge, and all
-discovered pitfalls are already documented — start from what works and extend.
+Desired outcome:
+- `ros2-cli_0.32.1_amd64.snap`
+- `ros2-nav2_1.3.11_amd64.snap`
 
 ---
 
-## Architecture
+## What Needs to Change
 
-```
-Host (has Docker)
-  └─ docker build -t ros-snapcraft .           # build image from Dockerfile
-  └─ docker run -d --name snap-builder \
-       -v $(pwd)/snaps:/workspace ros-snapcraft \
-       tail -f /dev/null                        # daemon container
-  └─ docker exec snap-builder bash -c "cd /workspace/ros2cli-snap && snapcraft pack"
-  └─ docker exec snap-builder bash -c "cd /workspace/ros2-nav2-snap && snapcraft pack"
-  └─ docker cp snap-builder:/workspace/ros2cli-snap/*.snap .
-  └─ docker cp snap-builder:/workspace/ros2-nav2-snap/*.snap .
-```
+### 1. Docker multi-arch build (docker buildx)
 
----
+The current `docker build` only targets the host architecture. Use `docker buildx`
+to build the image for both `linux/amd64` and `linux/arm64`:
 
-## Base Image
-
-Use **`ros:jazzy-ros-base`** (the official Docker library multi-arch image).
-
-**Why:** `osrf/ros:jazzy-desktop-full` only has a linux/amd64 image — it
-fails with "exec format error" on arm64/aarch64 hosts. `ros:jazzy-ros-base`
-is multi-arch and runs natively on arm64.
-
-**Already present in `ros:jazzy-ros-base` (no need to install):**
-- `gpg`, `dirmngr`, `python3-empy`, `python3-numpy`
-
-**Still needed (installed in Dockerfile):**
-- `python3-apt`, `python3-catkin-pkg`, `python3-venv`, `squashfs-tools`, `patchelf`, `sudo`, `git`
-
----
-
-## Workflow
-
-### Step 1 — Prepare snap repos on the host
 ```bash
-mkdir -p snaps
-cd snaps
+# One-time setup (if not already done)
+docker buildx create --name multiarch --driver docker-container --use
+docker buildx inspect --bootstrap
 
+# Build multi-arch image
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t ros-snapcraft:latest \
+  --load \        # or --push if pushing to a registry
+  .
+```
+
+For amd64 snap builds on an arm64 host, Docker uses QEMU emulation automatically
+via the `docker-container` buildx driver. The builds will be slower but correct.
+
+### 2. Running amd64 snap builds
+
+To build the amd64 snaps, run the container explicitly with `--platform linux/amd64`:
+
+```bash
+docker run -d --name snap-builder-amd64 \
+  --platform linux/amd64 \
+  -v $(pwd)/snaps-amd64:/workspace \
+  ros-snapcraft:latest \
+  tail -f /dev/null
+
+docker exec snap-builder-amd64 bash -c "cd /workspace/ros2cli-snap && snapcraft pack"
+docker exec snap-builder-amd64 bash -c "cd /workspace/ros2-nav2-snap && snapcraft pack"
+```
+
+### 3. Prepare amd64 snap repos
+
+Clone the same repos into a separate directory for the amd64 build (keep arm64
+artifacts separate to avoid conflicts):
+
+```bash
+mkdir -p snaps-amd64
+cd snaps-amd64
 git clone --depth=1 --branch jazzy https://github.com/canonical/ros2cli-snap.git
 git clone --depth=1 --branch jazzy https://github.com/canonical/ros2-nav2-snap.git
 ```
-No changes to the snap recipes — use them exactly as cloned.
 
-### Step 2 — Build the Docker image
+---
+
+## Known Arch-Specific Issue: LD_LIBRARY_PATH
+
+The ROS setup script (`source /opt/ros/jazzy/setup.bash`) sets `LD_LIBRARY_PATH`
+with an architecture-specific multiarch tuple:
+
+| Arch | Library path |
+|------|-------------|
+| arm64 | `/opt/ros/jazzy/lib/aarch64-linux-gnu:/opt/ros/jazzy/lib` |
+| amd64 | `/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/lib` |
+
+**`LD_LIBRARY_PATH` is intentionally NOT in the Dockerfile `ENV`** — it was
+removed because hardcoding `aarch64-linux-gnu` would break amd64 builds.
+`setup.bash` sets it correctly at container startup via the entrypoint.
+
+For `docker exec` sessions that need `LD_LIBRARY_PATH`: either run
+`source /opt/ros/jazzy/setup.bash` first, or confirm that snapcraft's build
+works without it (it has in testing — the colcon plugin handles its own env).
+
+---
+
+## Workflow Summary
+
+### Step 1 — Enable buildx multi-arch support
 ```bash
-# Run from the repo root (where the Dockerfile lives)
-docker build -t ros-snapcraft .
+docker buildx create --name multiarch --driver docker-container --use
+docker buildx inspect --bootstrap
 ```
 
-### Step 3 — Start daemon container
+### Step 2 — Build the multi-arch image
 ```bash
-docker run -d --name snap-builder \
-  -v $(pwd)/snaps:/workspace \
-  ros-snapcraft \
+docker buildx build --platform linux/amd64,linux/arm64 -t ros-snapcraft --load .
+```
+
+If `--load` fails with multi-platform (docker limitation), build per-arch:
+```bash
+docker buildx build --platform linux/amd64 -t ros-snapcraft:amd64 --load .
+docker buildx build --platform linux/arm64 -t ros-snapcraft:arm64 --load .
+```
+
+### Step 3 — Clone snap repos for amd64
+```bash
+mkdir -p snaps-amd64
+cd snaps-amd64
+git clone --depth=1 --branch jazzy https://github.com/canonical/ros2cli-snap.git
+git clone --depth=1 --branch jazzy https://github.com/canonical/ros2-nav2-snap.git
+```
+
+### Step 4 — Start amd64 container and build snaps
+```bash
+docker run -d --name snap-builder-amd64 \
+  --platform linux/amd64 \
+  -v $(pwd)/snaps-amd64:/workspace \
+  ros-snapcraft:amd64 \
   tail -f /dev/null
-```
 
-### Step 4 — Build snaps via docker exec
-Build one at a time, capture logs:
+docker exec snap-builder-amd64 bash -c \
+  "cd /workspace/ros2cli-snap && snapcraft pack" \
+  2>&1 | tee /tmp/build_ros2cli_amd64.log
+echo "exit: ${PIPESTATUS[0]}"
 
-```bash
-# ros2cli
-docker exec snap-builder bash -c "
-  source /opt/ros/jazzy/setup.bash &&
-  export SNAPCRAFT_BUILD_ENVIRONMENT=host &&
-  export SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1 &&
-  export PYTHONPATH=/usr/lib/python3/dist-packages &&
-  cd /workspace/ros2cli-snap &&
-  snapcraft pack
-" 2>&1 | tee /tmp/build_ros2cli.log
-echo "ros2cli exit: $?"
-
-# ros2-nav2
-docker exec snap-builder bash -c "
-  source /opt/ros/jazzy/setup.bash &&
-  export SNAPCRAFT_BUILD_ENVIRONMENT=host &&
-  export SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1 &&
-  export PYTHONPATH=/usr/lib/python3/dist-packages &&
-  cd /workspace/ros2-nav2-snap &&
-  snapcraft pack
-" 2>&1 | tee /tmp/build_ros2nav2.log
-echo "ros2-nav2 exit: $?"
+docker exec snap-builder-amd64 bash -c \
+  "cd /workspace/ros2-nav2-snap && snapcraft pack" \
+  2>&1 | tee /tmp/build_ros2nav2_amd64.log
+echo "exit: ${PIPESTATUS[0]}"
 ```
 
 ### Step 5 — On error, iterate on Dockerfile
-- Read the error log
-- Update `Dockerfile` in the repo root
-- Rebuild image: `docker stop snap-builder && docker rm snap-builder && docker build -t ros-snapcraft .`
-- Restart daemon and retry from Step 3
-- For colcon-only failures (build phase already passed pull), use:
-  ```bash
-  docker exec snap-builder bash -c "cd /workspace/<snap> && snapcraft clean <part> && snapcraft pack"
-  ```
+Apply the same iteration loop as before:
+- Read the log, identify the error
+- Update Dockerfile, rebuild image, restart container, retry
+- Consult `KNOWLEDGE_BASE.md` for known pitfalls — most should already be solved
 
-### Step 6 — Collect results
+### Step 6 — Verify and collect results
 ```bash
-docker cp snap-builder:/workspace/ros2cli-snap/ros2-cli_*.snap ./snaps/
-docker cp snap-builder:/workspace/ros2-nav2-snap/ros2-nav2_*.snap ./snaps/
-ls -lh ./snaps/*.snap
+docker exec snap-builder-amd64 bash -c "
+  unsquashfs -l /workspace/ros2cli-snap/*.snap | head -10
+  unsquashfs -l /workspace/ros2-nav2-snap/*.snap | head -10
+"
+ls -lh snaps-amd64/ros2cli-snap/*.snap snaps-amd64/ros2-nav2-snap/*.snap
 ```
 
 ---
 
-## Known Working Fixes (already in Dockerfile)
+## After Both Arches Build
 
-| Fix | Why needed |
-|-----|-----------|
-| `gpg` + `dirmngr` in apt | craft_parts calls `gpg --dearmor` for repo signing keys |
-| Python RUN step: convert `ros2.sources` PGP → keyring file | apt 2.7+ errors on conflicting Signed-By formats |
-| `ENV PYTHONPATH=/usr/lib/python3/dist-packages` | Staged python3 (isolated sys.path) needs catkin_pkg, em, numpy |
-| `--system-site-packages` venv for snapcraft | Exposes python3-apt (C extension) to snapcraft venv |
-| Extensions path: copy ros2 to `sys.prefix/share/` | pip layout ≠ snapcraft expected layout |
-| `empy<4.0` pinned in snapcraft venv | ROS Jazzy rosidl incompatible with empy 4.x API |
-| Non-root `builder` user, passwordless sudo for apt-get | Security best practice |
-
-With `osrf/ros:jazzy-desktop-full` some of these may be redundant — trim as you verify.
-
----
-
-## Key Principle: No Snap Recipe Modifications
-
-All python module errors (`catkin_pkg`, `em`, `numpy`) in the staged python3
-are fixed via **`PYTHONPATH=/usr/lib/python3/dist-packages`** in the environment.
-Do not add injection code to the snap recipes' `override-build` sections.
-If a new module is missing, check if it's installable as `python3-<name>` on
-the host and it will be visible via PYTHONPATH automatically.
-
----
-
-## After Each Snap Builds
-
-1. Verify the `.snap` file exists and is valid:
-   ```bash
-   file *.snap
-   unsquashfs -l *.snap | head -20
-   ```
-2. Commit any Dockerfile changes with a short message describing what was fixed.
-3. Update `KNOWLEDGE_BASE.md` with any new pitfalls discovered.
-4. Report final status: which snaps built, which failed, snap file sizes.
+1. Commit any new Dockerfile fixes.
+2. Update `KNOWLEDGE_BASE.md` with any new amd64-specific pitfalls.
+3. Report: both snap files for both arches, sizes, any regressions.

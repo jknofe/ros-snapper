@@ -90,8 +90,10 @@ ENV SNAPCRAFT_BUILD_ENVIRONMENT=host \
     ROS_VERSION=2 \
     ROS_PYTHON_VERSION=3 \
     AMENT_PREFIX_PATH=/opt/ros/jazzy \
-    LD_LIBRARY_PATH=/opt/ros/jazzy/lib/aarch64-linux-gnu:/opt/ros/jazzy/lib \
     PYTHONPATH=/usr/lib/python3/dist-packages:/opt/ros/jazzy/lib/python3.12/site-packages
+# NOTE: LD_LIBRARY_PATH is intentionally omitted — it contains an arch-specific
+# multiarch tuple (aarch64-linux-gnu vs x86_64-linux-gnu). setup.bash sets it
+# correctly at runtime; the entrypoint sources it for interactive use.
 
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
 
