@@ -2,16 +2,25 @@
 
 ## Environment Profile
 
-| Property | Value |
-|----------|-------|
-| OS | Ubuntu 24.04 LTS (Noble Numbat) |
-| Architecture | arm64 (aarch64) |
-| ROS distro | ROS 2 Jazzy Jalisco (`/opt/ros/jazzy`) |
-| Python | 3.12.3 |
-| CPU | 4 cores |
-| RAM | ~1.8 GB total, ~1 GB available |
-| Disk | ~51 GB available |
-| User | root (snapcraft destructive mode requires write access to apt cache) |
+| Property | arm64 (tested) | amd64 (next) |
+|----------|---------------|--------------|
+| OS | Ubuntu 24.04 LTS (Noble Numbat) | Ubuntu 24.04 LTS |
+| Architecture | arm64 (aarch64) | amd64 (x86_64) |
+| ROS distro | ROS 2 Jazzy Jalisco (`/opt/ros/jazzy`) | same |
+| Python | 3.12.3 | 3.12.x |
+| User | root | root |
+
+**User:** root — snapcraft destructive mode requires write access to `/var/lib/apt/lists/partial`
+(Python-level apt cache check, not a subprocess). Remove any `USER` directive from the Dockerfile.
+
+## Build Results
+
+| Arch | Snap | File | Size |
+|------|------|------|------|
+| arm64 | `ros2-cli` | `ros2-cli_0.32.1_arm64.snap` | 168 MB |
+| arm64 | `ros2-nav2` | `ros2-nav2_1.3.11_arm64.snap` | 661 MB |
+| amd64 | `ros2-cli` | — | not yet built |
+| amd64 | `ros2-nav2` | — | not yet built |
 
 ---
 
@@ -52,12 +61,23 @@ snapcraft pack   # "snapcraft" alone is deprecated in 9.x
 
 ## Required Environment Variables
 
-```bash
-export SNAPCRAFT_BUILD_ENVIRONMENT=host          # skip LXD/Multipass
-export SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1 # ros2-jazzy-ros-base is experimental
-export PYTHONPATH=/usr/lib/python3/dist-packages  # ← critical, see below
-source /opt/ros/jazzy/setup.bash
+The following are baked into the Dockerfile `ENV` and are available automatically
+in all `docker exec` sessions — no manual export needed:
+
 ```
+SNAPCRAFT_BUILD_ENVIRONMENT=host
+SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1
+ROS_DISTRO=jazzy
+ROS_VERSION=2
+ROS_PYTHON_VERSION=3
+AMENT_PREFIX_PATH=/opt/ros/jazzy
+PYTHONPATH=/usr/lib/python3/dist-packages:/opt/ros/jazzy/lib/python3.12/site-packages
+```
+
+**`LD_LIBRARY_PATH` is NOT baked in** — it contains an arch-specific multiarch tuple
+(`aarch64-linux-gnu` on arm64, `x86_64-linux-gnu` on amd64). The entrypoint sources
+`/opt/ros/jazzy/setup.bash` which sets it correctly for interactive sessions.
+snapcraft's colcon plugin handles its own environment during builds.
 
 ---
 
@@ -261,19 +281,20 @@ apt-get install -y \
 ## Quick Reference
 
 ```bash
-# Environment (must be set before snapcraft)
-export SNAPCRAFT_BUILD_ENVIRONMENT=host
-export SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1
-export PYTHONPATH=/usr/lib/python3/dist-packages
-source /opt/ros/jazzy/setup.bash
+# All env vars are baked into the image — no manual export needed in docker exec.
+# Build (from inside the container):
+cd /workspace/ros2cli-snap && snapcraft pack
+cd /workspace/ros2-nav2-snap && snapcraft pack
 
-# Build
-cd /workspace/ros2cli-snap-jazzy
+# Incremental rebuild after a partial failure (keeps downloaded stage packages):
+snapcraft clean <part-name>
 snapcraft pack
 
-# Incremental rebuild (keeps downloaded stage packages)
-snapcraft clean ros2cli
-snapcraft pack
+# Restart the daemon container after a Dockerfile change:
+docker rm -f snap-builder
+docker build -t ros-snapcraft .
+docker run -d --name snap-builder \
+  -v $(pwd)/snaps:/workspace ros-snapcraft tail -f /dev/null
 ```
 
 ---
@@ -281,5 +302,6 @@ snapcraft pack
 ## Caveats
 
 - **Destructive mode = no isolation.** Always `snapcraft clean` between full rebuilds.
-- **Memory.** ~1 GB free RAM with 4 cores. If colcon OOMs, reduce parallelism via `--parallel-workers 2` in the `colcon-cmake-args` key.
-- **apt lists wiped.** The Dockerfile does `rm -rf /var/lib/apt/lists/*` per layer. snapcraft runs its own internal `apt-get update` before resolving build-packages — this is fine as long as the Signed-By conflict is resolved first.
+- **Memory.** If colcon OOMs, reduce parallelism via `--parallel-workers 2` in `colcon-cmake-args`. ros2-nav2 is a large build.
+- **apt lists wiped.** The Dockerfile does `rm -rf /var/lib/apt/lists/*` per layer. snapcraft runs its own internal `apt-get update` — fine as long as the Signed-By conflict is resolved (ros2.sources deleted).
+- **Exit code masking.** Using `cmd | tee log` makes `$?` return tee's exit code (always 0). Use `${PIPESTATUS[0]}` to get the real exit code of the snapcraft command.
