@@ -1,5 +1,9 @@
 snaps/ros2cli-snap/
+snaps/ros2cli-snap-jazzy/
+snaps/ros2cli-snap-humble/
 snaps/ros2-nav2-snap/
+snaps/ros2-nav2-snap-jazzy/
+snaps/ros2-nav2-snap-humble/
 snaps/**/*.snap
 snaps/ros2-test-pub/overlay/
 snaps/ros2-test-pub/parts/
@@ -7,3 +11,16 @@ snaps/ros2-test-pub/prime/
 snaps/ros2-test-pub/stage/
 snaps/ros2-test-pub/build.log
 snaps/ros2-test-pub/.craft/
+snaps/ros2-test-pub-humble/overlay/
+snaps/ros2-test-pub-humble/parts/
+snaps/ros2-test-pub-humble/prime/
+snaps/ros2-test-pub-humble/stage/
+snaps/ros2-test-pub-humble/build.log
+snaps/ros2-test-pub-humble/.craft/
+snaps/ros2-test-pub-rolling/overlay/
+snaps/ros2-test-pub-rolling/parts/
+snaps/ros2-test-pub-rolling/prime/
+snaps/ros2-test-pub-rolling/stage/
+snaps/ros2-test-pub-rolling/build.log
+snaps/ros2-test-pub-rolling/.craft/
+.tmp/

@@ -1,18 +1,20 @@
 # ros-snapper
 
-Builds ROS 2 Jazzy snaps inside Docker using snapcraft in destructive mode. No LXD, no privileged container needed.
+Builds ROS 2 snaps inside Docker using snapcraft in destructive mode. No LXD, no privileged container needed.
 
-Tested on Ubuntu 24.04, amd64 and arm64.
+Supports Jazzy, Humble, and Rolling. Tested on amd64 (arm64 tested for Jazzy).
 
 ## Snaps
 
-| Snap | Source | arm64 | amd64 |
-|------|--------|-------|-------|
-| `ros2-cli` | [canonical/ros2cli-snap@jazzy](https://github.com/canonical/ros2cli-snap) | 168 MB | 176 MB |
-| `ros2-nav2` | [canonical/ros2-nav2-snap@jazzy](https://github.com/canonical/ros2-nav2-snap) | 661 MB | 769 MB |
-| `ros2-test-pub` | [`snaps/ros2-test-pub/`](snaps/ros2-test-pub/) | - | 18 MB |
+| Snap | Source | Jazzy | Humble |
+|------|--------|-------|--------|
+| `ros2-cli` | [canonical/ros2cli-snap](https://github.com/canonical/ros2cli-snap) | 176 MB | 180 MB |
+| `ros2-nav2` | [canonical/ros2-nav2-snap](https://github.com/canonical/ros2-nav2-snap) | 769 MB | - |
+| `ros2-test-pub` | [`snaps/ros2-test-pub*/`](snaps/) | 18 MB | 30 MB |
 
-`ros2-test-pub` is a minimal publisher used to verify cross-snap ROS 2 communication.
+`ros2-test-pub` variants are minimal publishers used to verify cross-snap ROS 2 communication.
+
+Rolling: Dockerfile works, but there's no `ros-rolling-ros-base` content snap in the store and no `ros2-rolling` extension in snapcraft 9.0. test-pub builds but can't be connected at runtime.
 
 ## Requirements
 
@@ -22,25 +24,29 @@ Tested on Ubuntu 24.04, amd64 and arm64.
 ## Usage
 
 ```bash
-# build the image once
-make build-image
+# build the image for a distro
+make build-image-jazzy     # or -humble / -rolling
 
 # clone upstream snap recipes
-make clone-snaps
+make clone-snaps-jazzy
 
 # start the build container
-make start-builder
+make start-builder-jazzy
 
-# build snaps (first run downloads all ROS deps - takes a while)
-make build-ros2-cli       # ~20 min
-make build-ros2-nav2      # ~40 min
-make build-test-pub       # ~1 min
+# build snaps
+make build-jazzy-ros2-cli    # ~20 min
+make build-jazzy-ros2-nav2   # ~40 min
+make build-jazzy-test-pub    # ~1 min
+
+# or build everything at once
+make all-jazzy
+make all-humble
 ```
 
 Install and smoke-test:
 
 ```bash
-sudo snap install --dangerous snaps/ros2cli-snap/ros2-cli_*.snap
+sudo snap install --dangerous snaps/ros2cli-snap-jazzy/ros2-cli_*.snap
 sudo snap install --dangerous --devmode snaps/ros2-test-pub/ros2-test-pub_*.snap
 sudo snap connect ros2-test-pub:ros-jazzy-ros-base ros-jazzy-ros-base:ros-jazzy-ros-base
 
@@ -51,22 +57,22 @@ ros2-cli.ros2 topic echo /test/string --once
 
 ## Multi-arch
 
-The Dockerfile works on both architectures unchanged. Run the same steps on each host:
+The Dockerfiles work on both architectures unchanged. Run the same steps on each host:
 
 ```
-arm64 host                       amd64 host
-make build-image                 make build-image
-make build-ros2-cli  -> _arm64   make build-ros2-cli  -> _amd64
-make build-ros2-nav2 -> _arm64   make build-ros2-nav2 -> _amd64
+arm64 host                             amd64 host
+make build-image-jazzy                 make build-image-jazzy
+make build-jazzy-ros2-cli  -> _arm64  make build-jazzy-ros2-cli  -> _amd64
 ```
 
 ## How it works
 
-The Dockerfile adds snapcraft 9.x (not on PyPI, installed from GitHub) on top of `ros:jazzy-ros-base` and sets `SNAPCRAFT_BUILD_ENVIRONMENT=host`. A few things needed fixing:
+Each Dockerfile adds snapcraft 9.x (not on PyPI, installed from GitHub) on top of a `ros:X-ros-base` image and sets `SNAPCRAFT_BUILD_ENVIRONMENT=host`. A few things needed fixing:
 
 - `snapd` is installed so `snap pack` works. The command is self-contained in the binary and doesn't need a running daemon, it just shells out to `mksquashfs`.
 - The ROS apt source is deleted after package install so craft_parts can own it without a key conflict.
 - `PYTHONPATH` is set to expose the host's dist-packages to the staged python3 that snapcraft downloads, which otherwise can't see catkin_pkg, empy, or numpy.
+- Humble (Ubuntu 22.04) and Rolling (Ubuntu 24.04 with ROS deps) install old system packages that conflict with snapcraft's pydantic_core and pyparsing. Fixed by appending a sys.path reordering block to `/usr/lib/python3.X/sitecustomize.py` so the venv's packages take priority.
 
 See [KNOWLEDGE_BASE.md](KNOWLEDGE_BASE.md) for the full story.
 

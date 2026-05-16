@@ -1,24 +1,27 @@
 # Build notes: ROS 2 snaps with snapcraft inside Docker
 
-Collected pitfalls and fixes from building `ros2-cli` and `ros2-nav2` on arm64 and amd64.
+Collected pitfalls and fixes from building ROS 2 snaps on Jazzy, Humble, and Rolling.
 
 ## Setup
 
-- OS: Ubuntu 24.04 (Noble)
-- ROS: Jazzy Jalisco at `/opt/ros/jazzy`
-- Python: 3.12
+- OS: Ubuntu 24.04 (Noble) for Jazzy and Rolling containers; Ubuntu 22.04 (Jammy) for Humble
 - Run as root - snapcraft destructive mode needs write access to `/var/lib/apt/lists/partial`
+- Dockerfile per distro: `Dockerfile.jazzy`, `Dockerfile.humble`, `Dockerfile.rolling`
 
 ## Build results
 
-| Arch | Snap | Size |
-|------|------|------|
-| arm64 | ros2-cli_0.32.1_arm64.snap | 168 MB |
-| arm64 | ros2-nav2_1.3.11_arm64.snap | 661 MB |
-| arm64 | ros2-test-pub_0.1_arm64.snap | ~18 MB |
-| amd64 | ros2-cli_0.32.1_amd64.snap | 176 MB |
-| amd64 | ros2-nav2_1.3.11_amd64.snap | 769 MB |
-| amd64 | ros2-test-pub_0.1_amd64.snap | 18 MB |
+| Distro | Snap | amd64 size |
+|--------|------|-----------|
+| Jazzy | ros2-cli_0.32.1_amd64.snap | 176 MB |
+| Jazzy | ros2-nav2_1.3.11_amd64.snap | 769 MB |
+| Jazzy | ros2-test-pub_0.1_amd64.snap | 18 MB |
+| Humble | ros2-cli_0.18.11_amd64.snap | 180 MB |
+| Humble | ros2-test-pub-humble_0.1_amd64.snap | ~30 MB |
+| Rolling | ros2-test-pub-rolling_0.1_amd64.snap | 18 MB |
+
+Rolling has no snapcraft extension and no store content snap yet. test-pub builds but can't be tested at runtime.
+
+arm64 results: ros2-cli 168 MB, ros2-nav2 661 MB, ros2-test-pub 18 MB (all Jazzy).
 
 ## Container capability audit
 
@@ -73,6 +76,25 @@ No changes to the snap recipe needed.
 
 ---
 
+### System packages conflicting with snapcraft's venv (Humble and Rolling)
+
+The snapcraft venv uses `--system-site-packages` so that python3-apt (a C extension) is accessible. When `PYTHONPATH` points to the system dist-packages, old system packages get prepended to sys.path and override the venv's pinned versions:
+
+- Humble (Ubuntu 22.04): `pyparsing 2.4.7` is too old for craft_application's launchpadlib, which calls `pp.Word(...).set_name(...)` (API added in pyparsing 3.1).
+- Rolling: `ros:rolling-ros-base` installs an old `typing_extensions` that doesn't have `Sentinel` (added in 4.12). pydantic_core needs it.
+
+The fix: append to the system `sitecustomize.py` so the venv's site-packages come first in sys.path when running snapcraft. The appended code checks for the venv path in sys.path and only runs when the venv Python is active - it's a no-op for the staged python3, which has a completely different sys.path.
+
+```dockerfile
+# In Dockerfile.humble (Python 3.10)
+RUN printf '\nimport sys as _sys\n_sp = "/opt/snapcraft/lib/python3.10/site-packages"\nif _sp in _sys.path:\n    _sys.path.remove(_sp)\n    _sys.path.insert(0, _sp)\n' \
+    >> /usr/lib/python3.10/sitecustomize.py
+```
+
+The key reason this works: `/usr/lib/python3.X/sitecustomize.py` is read by the system Python, which is what the snapcraft venv's Python is based on. The staged python3 that the colcon plugin downloads ALSO reads this file, but the `if _sp in _sys.path:` guard makes it a no-op there since the venv path is not in the staged python3's sys.path.
+
+---
+
 ### Snapcraft extensions path
 
 pip installs the extension data under `site-packages/extensions/` but snapcraft looks for it at `sys.prefix/share/snapcraft/extensions/`. Fix:
@@ -83,11 +105,13 @@ cp -r /opt/snapcraft/lib/python3.12/site-packages/extensions/ros2 \
       /opt/snapcraft/share/snapcraft/extensions/
 ```
 
+For Humble (python3.10), the path is `lib/python3.10/site-packages/extensions/ros2`.
+
 ---
 
 ### empy version
 
-`rosidl_adapter` imports `em`. empy 4.x changed its API and ROS Jazzy isn't compatible with it yet. Pin to `empy<4.0` in the venv.
+`rosidl_adapter` imports `em`. empy 4.x changed its API and ROS isn't compatible with it yet. Pin to `empy<4.0` in the venv.
 
 ---
 
@@ -117,29 +141,44 @@ Installing the `snapd` package is enough - no daemon, no stub script needed. Thi
 
 ---
 
-## Snap recipe
+### Rolling has no snap packaging infrastructure yet
 
-Using the unmodified canonical recipe from https://github.com/canonical/ros2cli-snap with one change: `source-branch: jazzy` instead of `source-tag: 0.32.1`.
+snapcraft 9.0.0 has no `ros2-rolling-*` extension (only jazzy and humble). The Snap Store has no `ros-rolling-ros-base` content snap. The canonical/ros2cli-snap repo has no rolling branch (master tracks foxy).
 
-The host packages needed during build (`catkin_pkg`, `empy`, `numpy`) are exposed via `PYTHONPATH` - the snap recipe itself is untouched.
+Dockerfile.rolling builds and snapcraft works, but you can only build content-snap-free snaps. ros2-test-pub-rolling builds but can't connect to a content snap at runtime.
+
+---
+
+### Humble test-pub snap needs python3-numpy staged
+
+The `ros-humble-ros-base` content snap's `geometry_msgs` imports numpy at import time. Unlike jazzy, numpy is not available through the underlay's dist-packages alone. Stage `python3-numpy` in the test-pub snap and add `$UNDERLAY/usr/lib/python3/dist-packages` to the snap's PYTHONPATH in `launch.sh`.
+
+---
+
+## Snap recipes
+
+- Jazzy ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch jazzy)
+- Humble ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch humble)
+- ros2-nav2: unmodified from https://github.com/canonical/ros2-nav2-snap
+- ros2-test-pub variants: in `snaps/ros2-test-pub/`, `snaps/ros2-test-pub-humble/`, `snaps/ros2-test-pub-rolling/`
 
 ---
 
 ## Environment variables
 
-All of these are baked into the Dockerfile, no manual export needed in `docker exec` sessions:
+All baked into each Dockerfile, no manual export needed:
 
 ```
 SNAPCRAFT_BUILD_ENVIRONMENT=host
 SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1
-ROS_DISTRO=jazzy
+ROS_DISTRO=<jazzy|humble|rolling>
 ROS_VERSION=2
 ROS_PYTHON_VERSION=3
-AMENT_PREFIX_PATH=/opt/ros/jazzy
-PYTHONPATH=/usr/lib/python3/dist-packages:/opt/ros/jazzy/lib/python3.12/site-packages
+AMENT_PREFIX_PATH=/opt/ros/<distro>
+PYTHONPATH=/usr/lib/python3/dist-packages:/opt/ros/<distro>/lib/python3.X/site-packages
 ```
 
-`LD_LIBRARY_PATH` is not set here because it contains an arch-specific multiarch tuple (`aarch64-linux-gnu` vs `x86_64-linux-gnu`). The entrypoint sources `setup.bash` which sets it correctly.
+`LD_LIBRARY_PATH` is not set here because it contains an arch-specific multiarch tuple. The entrypoint sources `setup.bash` which sets it correctly.
 
 ---
 
@@ -150,11 +189,11 @@ PYTHONPATH=/usr/lib/python3/dist-packages:/opt/ros/jazzy/lib/python3.12/site-pac
 snapcraft clean <part-name>
 snapcraft pack
 
-# restart the builder after a Dockerfile change
-docker rm -f snap-builder
-docker build -t ros-snapcraft .
-docker run -d --name snap-builder \
-  -v $(pwd)/snaps:/workspace ros-snapcraft tail -f /dev/null
+# restart a builder after a Dockerfile change
+docker rm -f snap-builder-jazzy
+docker build -f Dockerfile.jazzy -t ros-snapcraft-jazzy .
+docker run -d --name snap-builder-jazzy \
+  -v $(pwd)/snaps:/workspace ros-snapcraft-jazzy tail -f /dev/null
 ```
 
 ---
@@ -179,6 +218,11 @@ Both `ros2-cli` and `ros2-test-pub` ship `fastdds_no_shared_memory.xml` and set 
 
 ### ros2-test-pub design
 
-Located in `snaps/ros2-test-pub/`. Uses `plugin: nil` with an override-build that installs two files: `pub.py` (a simple rclpy node publishing three topics at 1 Hz) and `launch.sh` (sets up PYTHONPATH and LD_LIBRARY_PATH from the content snap mount point). No compilation, builds in ~30 seconds.
+Three variants:
+- `snaps/ros2-test-pub/` (Jazzy, content snap: `ros-jazzy-ros-base`, base: core24)
+- `snaps/ros2-test-pub-humble/` (Humble, content snap: `ros-humble-ros-base`, base: core22)
+- `snaps/ros2-test-pub-rolling/` (Rolling, no usable content snap yet, base: core24)
+
+All use `plugin: nil` with an override-build that installs `pub.py` (rclpy node publishing three topics at 1 Hz) and `launch.sh` (sets PYTHONPATH and LD_LIBRARY_PATH from the content snap mount point). No compilation. Jazzy and rolling build in ~30 seconds; humble is ~60 seconds (stages numpy).
 
 `ARCH_TRIPLET` in `launch.sh` is auto-detected at runtime via `dpkg-architecture`.

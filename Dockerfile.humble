@@ -1,4 +1,4 @@
-FROM ros:jazzy-ros-base
+FROM ros:humble-ros-base
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-numpy \
     && rm -rf /var/lib/apt/lists/*
 
-# ros:jazzy-ros-base ships ros2.sources with an inline PGP block.
+# ros:humble-ros-base ships ros2.sources with an inline PGP block.
 # craft_parts adds its own keyring file for the same URL, and apt rejects
 # two different Signed-By values for the same repo. Deleting it here lets
 # craft_parts be the sole owner.
@@ -32,6 +32,7 @@ RUN mkdir -p /root
 
 # PyPI only has snapcraft 4.x; 9.x is git-only.
 # --system-site-packages exposes python3-apt (compiled C extension) to the venv.
+# Humble base is Ubuntu 22.04 which uses Python 3.10
 RUN python3 -m venv --system-site-packages /opt/snapcraft \
     && /opt/snapcraft/bin/pip install --quiet --upgrade pip \
     && /opt/snapcraft/bin/pip install --quiet \
@@ -41,40 +42,41 @@ RUN python3 -m venv --system-site-packages /opt/snapcraft \
 
 # pip puts the extension data under site-packages/extensions/ but snapcraft
 # looks for it at sys.prefix/share/snapcraft/extensions/
+# Humble base is Ubuntu 22.04 which uses Python 3.10
 RUN mkdir -p /opt/snapcraft/share/snapcraft/extensions \
-    && cp -r /opt/snapcraft/lib/python3.12/site-packages/extensions/ros2 \
+    && cp -r /opt/snapcraft/lib/python3.10/site-packages/extensions/ros2 \
              /opt/snapcraft/share/snapcraft/extensions/
 
-# ROS Jazzy toolchain isn't compatible with empy 4.x
+# ROS toolchain isn't compatible with empy 4.x (same applies to Humble)
 RUN /opt/snapcraft/bin/pip install --quiet "empy<4.0" lark
 
 # sitecustomize.py runs when the venv's Python starts. It reorders sys.path so
 # that the venv's site-packages come before PYTHONPATH entries, preventing old
-# system packages (needed by the colcon staged python3 via PYTHONPATH) from
-# overriding the venv's pinned dependencies like pydantic_core and pyparsing.
+# system packages (Ubuntu 22.04 ships old pyparsing/typing_extensions that conflict
+# with snapcraft's launchpadlib and pydantic_core) from overriding the venv's deps.
 # This file is only read by /opt/snapcraft/bin/python3, not by the staged python3.
-RUN printf '\nimport sys as _sys\n_sp = "/opt/snapcraft/lib/python3.12/site-packages"\nif _sp in _sys.path:\n    _sys.path.remove(_sp)\n    _sys.path.insert(0, _sp)\n' \
-    >> /usr/lib/python3.12/sitecustomize.py \
-    && rm -f /opt/snapcraft/lib/python3.12/site-packages/sitecustomize.py
+RUN printf '\nimport sys as _sys\n_sp = "/opt/snapcraft/lib/python3.10/site-packages"\nif _sp in _sys.path:\n    _sys.path.remove(_sp)\n    _sys.path.insert(0, _sp)\n' \
+    >> /usr/lib/python3.10/sitecustomize.py \
+    && rm -f /opt/snapcraft/lib/python3.10/site-packages/sitecustomize.py
 
 # initialize as root so /etc/ros/rosdep/sources.list.d is writable
 RUN rosdep init 2>/dev/null || true \
-    && rosdep update --rosdistro jazzy
+    && rosdep update --rosdistro humble
 
 # PYTHONPATH: the colcon plugin stages its own python3 with an isolated sys.path.
 # Setting this here makes catkin_pkg, empy, and numpy visible to it without
 # touching the snap recipe.
 ENV SNAPCRAFT_BUILD_ENVIRONMENT=host \
     SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1 \
-    ROS_DISTRO=jazzy \
+    ROS_DISTRO=humble \
     ROS_VERSION=2 \
     ROS_PYTHON_VERSION=3 \
-    AMENT_PREFIX_PATH=/opt/ros/jazzy \
-    PYTHONPATH=/usr/lib/python3/dist-packages:/opt/ros/jazzy/lib/python3.12/site-packages
+    AMENT_PREFIX_PATH=/opt/ros/humble \
+    PYTHONPATH=/usr/lib/python3/dist-packages:/opt/ros/humble/lib/python3/dist-packages
 # LD_LIBRARY_PATH is not set here - it contains an arch-specific multiarch tuple.
 # The entrypoint sources setup.bash which sets it correctly.
 
-RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
