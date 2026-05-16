@@ -1,1 +1,9 @@
-snaps/
+snaps/ros2cli-snap/
+snaps/ros2-nav2-snap/
+snaps/**/*.snap
+snaps/ros2-test-pub/overlay/
+snaps/ros2-test-pub/parts/
+snaps/ros2-test-pub/prime/
+snaps/ros2-test-pub/stage/
+snaps/ros2-test-pub/build.log
+snaps/ros2-test-pub/.craft/

@@ -19,8 +19,10 @@
 |------|------|------|------|
 | arm64 | `ros2-cli` | `ros2-cli_0.32.1_arm64.snap` | 168 MB |
 | arm64 | `ros2-nav2` | `ros2-nav2_1.3.11_arm64.snap` | 661 MB |
-| amd64 | `ros2-cli` | — | not yet built |
-| amd64 | `ros2-nav2` | — | not yet built |
+| arm64 | `ros2-test-pub` | `ros2-test-pub_0.1_arm64.snap` | ~18 MB |
+| amd64 | `ros2-cli` | `ros2-cli_0.32.1_amd64.snap` | 176 MB |
+| amd64 | `ros2-nav2` | `ros2-nav2_1.3.11_amd64.snap` | 769 MB |
+| amd64 | `ros2-test-pub` | `ros2-test-pub_0.1_amd64.snap` | 18 MB |
 
 ---
 
@@ -305,3 +307,49 @@ docker run -d --name snap-builder \
 - **Memory.** If colcon OOMs, reduce parallelism via `--parallel-workers 2` in `colcon-cmake-args`. ros2-nav2 is a large build.
 - **apt lists wiped.** The Dockerfile does `rm -rf /var/lib/apt/lists/*` per layer. snapcraft runs its own internal `apt-get update` — fine as long as the Signed-By conflict is resolved (ros2.sources deleted).
 - **Exit code masking.** Using `cmd | tee log` makes `$?` return tee's exit code (always 0). Use `${PIPESTATUS[0]}` to get the real exit code of the snapcraft command.
+
+---
+
+## Cross-Snap ROS 2 Communication
+
+### Verified working: user-to-user snap communication
+
+Both snaps must run as the **same user**. Launch `ros2-test-pub` in the foreground (or as a user background job), then use `ros2-cli` to interact with it:
+
+```bash
+# Install
+sudo snap install --dangerous snaps/ros2cli-snap/ros2-cli_*.snap
+sudo snap install --dangerous --devmode snaps/ros2-test-pub/ros2-test-pub_*.snap
+sudo snap connect ros2-test-pub:ros-jazzy-ros-base ros-jazzy-ros-base:ros-jazzy-ros-base
+
+# Test (all as same non-root user)
+ros2-test-pub.pub &
+ros2-cli.ros2 node list               # → /ros2_test_pub
+ros2-cli.ros2 topic list              # → /test/string, /test/int32, /test/twist
+ros2-cli.ros2 topic echo /test/string --once
+ros2-cli.ros2 topic hz /test/twist
+```
+
+### Why root/user cross-snap communication fails
+
+FastDDS uses **shared-memory (SHM) transport** by default for local DDS participants. SHM segments are created with the publisher's UID. A subscriber running under a different UID cannot attach to them:
+- The subscribe attempt fails silently at the SHM level
+- The UDP fallback does **not** activate automatically — both sides must be SHM-only or both must prefer UDP
+- Result: `topic echo` receives no data even though both snaps are active
+
+**Fix:** Force UDP-only transport on both sides by providing a `fastdds_no_shared_memory.xml` profile. Both `ros2-cli` and `ros2-test-pub` ship this profile and set `FASTRTPS_DEFAULT_PROFILES_FILE` to it. Running both snaps as the same user makes this a non-issue.
+
+### ros2 daemon and SO_REUSEPORT
+
+`ros2-cli` starts a background daemon on first use that caches DDS discovery state. Short-lived commands (`node list`, `topic list`) use the daemon's cached view. Long-lived commands (`topic echo`) create a fresh DDS participant — but because DDS uses `SO_REUSEPORT` on the same ports, data sent by the publisher may be delivered to the daemon process instead of the echo process. Killing the daemon (`ros2 daemon stop`) before running `topic echo` works around this if you see no output.
+
+### ros2-test-pub snap design
+
+Located in `snaps/ros2-test-pub/`. Key choices:
+
+- **`plugin: nil` with `override-build`:** No compilation. Installs Python scripts and the FastDDS XML config directly. Builds in ~30 seconds.
+- **`confinement: devmode`:** Skips AppArmor policy enforcement, simplifying cross-snap content access during development.
+- **Python sourced from content snap:** `launch.sh` sets `PYTHONPATH` and `LD_LIBRARY_PATH` to point into `$SNAP/opt/ros/underlay_ws` (the `ros-jazzy-ros-base` content snap mount point). No ROS packages are staged — the snap is ~18 MB.
+- **UDP-only FastDDS:** Inlined `fastdds_no_shared_memory.xml` in `override-build` (not copied from another snap's install path, which wouldn't exist in the build container).
+
+The `ARCH_TRIPLET` in `launch.sh` is currently hardcoded to `x86_64-linux-gnu`. For an arm64 build, change it to `aarch64-linux-gnu`. A future improvement would be to detect this at runtime via `$(dpkg-architecture -qDEB_HOST_MULTIARCH)`.
