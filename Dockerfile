@@ -9,6 +9,11 @@ ARG USER_GID=1000
 # gpg + dirmngr   : craft_parts calls gpg --dearmor when installing repo keys;
 #                   must be present BEFORE snapcraft runs (not just gpg-agent)
 # squashfs-tools  : mksquashfs for final .snap packaging
+# snapd           : provides /usr/bin/snap — needed for "snap pack" and
+#                   "snap pack --check-skeleton". Both are self-contained in
+#                   the snap binary (no daemon socket needed); snap pack calls
+#                   mksquashfs from PATH internally. Same approach as the
+#                   official canonical/snapcraft-rocks image.
 # patchelf        : ELF rpath rewriting for staged libraries
 # python3-apt     : required by snapcraft (C extension, cannot be pip-installed)
 # sudo            : snapcraft installs build/stage packages via apt-get at build
@@ -24,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-venv \
         python3-apt \
         squashfs-tools \
+        snapd \
         patchelf \
         python3-catkin-pkg \
         python3-numpy \
@@ -96,16 +102,6 @@ ENV SNAPCRAFT_BUILD_ENVIRONMENT=host \
 # correctly at runtime; the entrypoint sources it for interactive use.
 
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
-
-# ── Stub snap binary ──────────────────────────────────────────────────────────
-# snapcraft pack calls two snap subcommands that require snapd (unavailable in
-# a non-privileged container):
-#   snap lint <prime_dir>        — pre-pack validation, we skip silently
-#   snap pack --filename F --compression C <prime> <outdir>
-#                                — actual squashfs packaging, we implement with
-#                                  mksquashfs (squashfs-tools already installed)
-COPY snap-stub.sh /usr/local/bin/snap
-RUN chmod +x /usr/local/bin/snap
 
 # ── Entrypoint helper ─────────────────────────────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh

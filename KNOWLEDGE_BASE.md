@@ -191,43 +191,33 @@ Additionally, `ros:jazzy-ros-base` ships with an `ubuntu` user at UID/GID 1000, 
 
 ---
 
-### 8. `snap` binary required for both lint and pack — stub with mksquashfs
+### 8. `snap` binary required for pack — install `snapd` package
 
-**Cause:** snapcraft 9.x delegates two operations to the `snap` CLI (part of snapd), which cannot run in a non-privileged container:
-1. `snap pack --check-skeleton <prime>` — pre-pack structural validation
-2. `snap lint <prime>` — metadata/library linting
-3. `snap pack --filename F --compression C <prime> <outdir>` — actual squashfs creation
+**Cause:** snapcraft 9.x calls the `snap` CLI (part of snapd) for two operations:
+1. `snap pack --check-skeleton <prime>` — pre-pack structural YAML validation
+2. `snap pack --filename F --compression C <prime> <outdir>` — actual squashfs creation
 
-**Fix:** Install a stub `/usr/local/bin/snap` that:
-- Returns 0 for `lint` and `pack --check-skeleton` (skips validation)
-- Implements `pack` via `mksquashfs` (squashfs-tools already in the image)
+**Key insight:** Both operations are **completely self-contained** in the `snap` binary.
+Neither requires a running snapd daemon:
+- `--check-skeleton` parses `meta/snap.yaml` entirely in-process (no IPC)
+- `snap pack` validates the YAML in-process, then calls `mksquashfs` from PATH
+  (tries `/snap/snapd/current/usr/bin/mksquashfs` first; falls back to PATH when
+  that path doesn't exist in Docker — i.e. always in Docker)
 
-```bash
-RUN cat > /usr/local/bin/snap << 'EOF'
-#!/bin/bash
-set -e
-case "$1" in
-  lint) exit 0 ;;
-  pack)
-    shift
-    for arg in "$@"; do [[ "$arg" == --check-skeleton ]] && exit 0; done
-    filename=""; compression="xz"; prime_dir=""; output_dir="."
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --filename)    filename="$2";    shift 2 ;;
-        --compression) compression="$2"; shift 2 ;;
-        --*)           shift ;;
-        *) [[ -z "$prime_dir" ]] && prime_dir="$1" || output_dir="$1"; shift ;;
-      esac
-    done
-    mksquashfs "$prime_dir" "${output_dir}/${filename}" \
-      -noappend -comp "$compression" -no-xattrs -all-root
-    ;;
-  *) exit 0 ;;
-esac
-EOF
-chmod +x /usr/local/bin/snap
+`snap lint` does **not** exist as a subcommand in modern snapd, and snapcraft 9.x
+never calls it.
+
+**Fix:** Install the `snapd` debian package. No daemon needed — just the binary.
+```dockerfile
+apt-get install -y ... snapd squashfs-tools
 ```
+`squashfs-tools` provides `mksquashfs` which `snap pack` calls internally.
+
+This approach is identical to what the official `canonical/snapcraft-rocks` image
+does (`stage-packages: [snapd]` in their rockcraft.yaml).
+
+**Note:** A `snap-stub.sh` workaround was used previously but is no longer needed
+and has been removed from the repo.
 
 ---
 
@@ -269,7 +259,8 @@ apt-get install -y \
   sudo \
   python3-venv \
   python3-apt \
-  squashfs-tools \
+  squashfs-tools \       # mksquashfs — called internally by "snap pack"
+  snapd \                # provides /usr/bin/snap for "snap pack" (no daemon needed)
   patchelf \
   python3-catkin-pkg \   # provides catkin_pkg + pyparsing + docutils for staged python3
   python3-numpy \        # provides numpy for staged python3
