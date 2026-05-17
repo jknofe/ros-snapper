@@ -174,7 +174,8 @@ In older versions you could put `extensions: [ros2-jazzy-ros-base]` at the snapc
 
 The repo bundles two kinds of example recipes used only to smoke-test the build flow. Your own snap recipe does not need to follow either layout.
 
-- `snaps/ros2-test-pub-jazzy/`, `snaps/ros2-test-pub-humble/`, `snaps/ros2-test-pub-rolling/` — minimal in-tree publishers, owned by this repo.
+- `snaps/ros2-test-pub-jazzy/`, `snaps/ros2-test-pub-humble/` — minimal in-tree publishers, owned by this repo.
+- `snaps/ros2-test-sub-jazzy/`, `snaps/ros2-test-sub-humble/` — matching subscribers, owned by this repo.
 - Upstream Canonical recipes, cloned by `make example-clone-<distro>`:
   - Jazzy ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch jazzy)
   - Humble ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch humble)
@@ -189,7 +190,7 @@ All baked into each Dockerfile, no manual export needed:
 ```
 SNAPCRAFT_BUILD_ENVIRONMENT=host
 SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1
-ROS_DISTRO=<jazzy|humble|rolling>
+ROS_DISTRO=<jazzy|humble>
 ROS_VERSION=2
 ROS_PYTHON_VERSION=3
 AMENT_PREFIX_PATH=/opt/ros/<distro>
@@ -224,6 +225,60 @@ docker run -d --name snap-builder-jazzy \
 
 ---
 
+## Testing without snapd (in-container)
+
+snapd can't run inside an unprivileged Docker container, but you can test ROS node communication by unsquashing the snaps and sourcing their colcon install spaces directly. `make test-jazzy` does this automatically.
+
+The trick relies on two properties of the colcon setup scripts:
+
+1. `setup.bash` uses `dirname "${BASH_SOURCE[0]}"` to find its own prefix, so it works at any unsquash path.
+2. It hardcodes `COLCON_CURRENT_PREFIX="/opt/ros/jazzy"` for the chain-source of the ROS base layer. Inside the build container, that path is the system ROS, so the chain resolves correctly without any content snap.
+
+Manual steps if you want to do it by hand:
+
+```bash
+unsquashfs -d /tmp/pub snaps/ros2-test-pub-jazzy/*.snap
+unsquashfs -d /tmp/sub snaps/ros2-test-sub-jazzy/*.snap
+set +u
+source /tmp/pub/opt/ros/snap/setup.bash        # chains to system /opt/ros/jazzy
+source /tmp/sub/opt/ros/snap/local_setup.bash  # adds sub packages only
+set -u
+export FASTRTPS_DEFAULT_PROFILES_FILE=/tmp/pub/usr/share/fastdds_no_shared_memory.xml
+/tmp/sub/opt/ros/snap/lib/test_sub_simple/sub_simple &
+sleep 2
+/tmp/pub/opt/ros/snap/lib/test_pub_simple/pub_simple &
+```
+
+The colcon setup scripts reference `COLCON_TRACE` and similar variables without defaults, so source them under `set +u`.
+
+---
+
+### Python ROS nodes exit with traceback on SIGTERM
+
+`rclpy.spin()` converts SIGTERM into `ExternalShutdownException` (not `KeyboardInterrupt`). If `main()` only catches `KeyboardInterrupt`, the exception propagates into the `finally` block, which then calls `rclpy.shutdown()` on an already-shut-down context, producing a second error:
+
+```
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called
+```
+
+Fix: catch both exceptions and use `try_shutdown()`:
+
+```python
+from rclpy.executors import ExternalShutdownException
+
+def main():
+    rclpy.init()
+    node = MyNode()
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    node.destroy_node()
+    rclpy.try_shutdown()
+```
+
+---
+
 ## Cross-snap ROS 2 communication
 
 Both snaps need to run as the same user. FastDDS uses shared-memory transport by default, and SHM segments are created with the publisher's UID - a subscriber under a different UID can't attach to them and the failure is silent. The UDP fallback doesn't activate automatically.
@@ -234,13 +289,11 @@ The `ros2-cli` and `ros2-test-pub-*` snaps all ship `fastdds_no_shared_memory.xm
 
 `ros2-cli` starts a background daemon on first use that caches DDS discovery. Short commands (`node list`, `topic list`) use its cached view. Long-running commands (`topic echo`) create a fresh DDS participant. If `topic echo` gets no output, try stopping the daemon first with `ros2 daemon stop`.
 
-### ros2-test-pub-* design
+### ros2-test-pub/sub-* design
 
-Three variants:
-- `snaps/ros2-test-pub-jazzy/` (Jazzy, content snap: `ros-jazzy-ros-base`, base: core24)
-- `snaps/ros2-test-pub-humble/` (Humble, content snap: `ros-humble-ros-base`, base: core22)
-- `snaps/ros2-test-pub-rolling/` (Rolling, no usable content snap yet, base: core24)
+Two distro variants each (Jazzy / Humble). Each snap contains two ROS 2 packages built with the `colcon` plugin + `ros2-<distro>-ros-base` extension:
 
-All use `plugin: nil` with an override-build that installs `pub.py` (rclpy node publishing three topics at 1 Hz) and `launch.sh` (sets PYTHONPATH and LD_LIBRARY_PATH from the content snap mount point). No compilation. Jazzy and rolling build in ~30 seconds; humble is ~60 seconds (stages numpy).
+- `test_{pub,sub}_simple` (Python, ament_python) — publishes/subscribes `/test/string`, `/test/int32`, `/test/twist` at 1 Hz.
+- `test_{pub,sub}_pointcloud` (C++, ament_cmake) — publishes/subscribes a 2048×2048 `sensor_msgs/PointCloud2` at 10 Hz with best-effort QoS (~48 MiB/msg).
 
-`ARCH_TRIPLET` in `launch.sh` is auto-detected at runtime via `dpkg-architecture`.
+The extension stages the `ros-<distro>-ros-base` packages into the snap under `opt/ros/<distro>/` and installs the colcon workspace under `opt/ros/snap/`. The snap is essentially self-contained: the `opt/ros/<distro>/` tree is present inside the squashfs, so it does not strictly require the content snap at test time (see "Testing without snapd" below).
