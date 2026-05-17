@@ -14,14 +14,14 @@ Collected pitfalls and fixes from building ROS 2 snaps on Jazzy, Humble, and Rol
 |--------|------|-----------|
 | Jazzy | ros2-cli_0.32.1_amd64.snap | 176 MB |
 | Jazzy | ros2-nav2_1.3.11_amd64.snap | 769 MB |
-| Jazzy | ros2-test-pub_0.1_amd64.snap | 18 MB |
+| Jazzy | ros2-test-pub-jazzy_0.1_amd64.snap | 18 MB |
 | Humble | ros2-cli_0.18.11_amd64.snap | 180 MB |
 | Humble | ros2-test-pub-humble_0.1_amd64.snap | ~30 MB |
 | Rolling | ros2-test-pub-rolling_0.1_amd64.snap | 18 MB |
 
 Rolling has no snapcraft extension and no store content snap yet. test-pub builds but can't be tested at runtime.
 
-arm64 results: ros2-cli 168 MB, ros2-nav2 661 MB, ros2-test-pub 18 MB (all Jazzy).
+arm64 results: ros2-cli 168 MB, ros2-nav2 661 MB, ros2-test-pub-jazzy 18 MB (all Jazzy).
 
 ## Container capability audit
 
@@ -176,7 +176,7 @@ The `ros-humble-ros-base` content snap's `geometry_msgs` imports numpy at import
 - Jazzy ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch jazzy)
 - Humble ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch humble)
 - ros2-nav2: unmodified from https://github.com/canonical/ros2-nav2-snap
-- ros2-test-pub variants: in `snaps/ros2-test-pub/`, `snaps/ros2-test-pub-humble/`, `snaps/ros2-test-pub-rolling/`
+- ros2-test-pub variants: in `snaps/ros2-test-pub-jazzy/`, `snaps/ros2-test-pub-humble/`, `snaps/ros2-test-pub-rolling/`
 
 ---
 
@@ -226,16 +226,16 @@ docker run -d --name snap-builder-jazzy \
 
 Both snaps need to run as the same user. FastDDS uses shared-memory transport by default, and SHM segments are created with the publisher's UID - a subscriber under a different UID can't attach to them and the failure is silent. The UDP fallback doesn't activate automatically.
 
-Both `ros2-cli` and `ros2-test-pub` ship `fastdds_no_shared_memory.xml` and set `FASTRTPS_DEFAULT_PROFILES_FILE` to it, forcing UDP.
+The `ros2-cli` and `ros2-test-pub-*` snaps all ship `fastdds_no_shared_memory.xml` and set `FASTRTPS_DEFAULT_PROFILES_FILE` to it, forcing UDP.
 
 ### ros2 daemon
 
 `ros2-cli` starts a background daemon on first use that caches DDS discovery. Short commands (`node list`, `topic list`) use its cached view. Long-running commands (`topic echo`) create a fresh DDS participant. If `topic echo` gets no output, try stopping the daemon first with `ros2 daemon stop`.
 
-### ros2-test-pub design
+### ros2-test-pub-* design
 
 Three variants:
-- `snaps/ros2-test-pub/` (Jazzy, content snap: `ros-jazzy-ros-base`, base: core24)
+- `snaps/ros2-test-pub-jazzy/` (Jazzy, content snap: `ros-jazzy-ros-base`, base: core24)
 - `snaps/ros2-test-pub-humble/` (Humble, content snap: `ros-humble-ros-base`, base: core22)
 - `snaps/ros2-test-pub-rolling/` (Rolling, no usable content snap yet, base: core24)
 

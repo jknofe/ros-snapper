@@ -38,7 +38,7 @@ build-jazzy-ros2-nav2:
 	docker exec snap-builder-jazzy $(PACK) ros2-nav2-snap-jazzy
 
 build-jazzy-test-pub:
-	docker exec snap-builder-jazzy $(PACK) ros2-test-pub
+	docker exec snap-builder-jazzy $(PACK) ros2-test-pub-jazzy
 
 all-jazzy: build-image-jazzy clone-snaps-jazzy start-builder-jazzy build-jazzy-ros2-cli build-jazzy-test-pub
 

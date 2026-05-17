@@ -14,9 +14,9 @@ One Dockerfile per distro: `Dockerfile.jazzy`, `Dockerfile.humble`, `Dockerfile.
 |------|--------|-------|--------|---------|
 | `ros2-cli` | [canonical/ros2cli-snap](https://github.com/canonical/ros2cli-snap) | 176 MB | 180 MB | - |
 | `ros2-nav2` | [canonical/ros2-nav2-snap](https://github.com/canonical/ros2-nav2-snap) | 769 MB | - | - |
-| `ros2-test-pub` | [`snaps/ros2-test-pub*/`](snaps/) | 18 MB | 30 MB | 18 MB |
+| `ros2-test-pub-<distro>` | [`snaps/ros2-test-pub-*/`](snaps/) | 18 MB | 30 MB | 18 MB |
 
-`ros2-test-pub` variants are minimal publishers used to verify cross-snap ROS 2 communication.
+The `ros2-test-pub-*` variants are minimal publishers used to verify cross-snap ROS 2 communication.
 
 Rolling builds work but runtime testing is blocked: snapcraft 9.0 has no `ros2-rolling` extension and the Snap Store has no `ros-rolling-ros-base` content snap. `ros2cli-snap` also has no rolling branch. `ros2-test-pub-rolling` packs fine but cannot connect to a content snap at runtime.
 
@@ -51,10 +51,10 @@ Install and smoke-test:
 
 ```bash
 sudo snap install --dangerous snaps/ros2cli-snap-jazzy/ros2-cli_*.snap
-sudo snap install --dangerous --devmode snaps/ros2-test-pub/ros2-test-pub_*.snap
-sudo snap connect ros2-test-pub:ros-jazzy-ros-base ros-jazzy-ros-base:ros-jazzy-ros-base
+sudo snap install --dangerous --devmode snaps/ros2-test-pub-jazzy/ros2-test-pub-jazzy_*.snap
+sudo snap connect ros2-test-pub-jazzy:ros-jazzy-ros-base ros-jazzy-ros-base:ros-jazzy-ros-base
 
-ros2-test-pub.pub &
+ros2-test-pub-jazzy.pub &
 ros2-cli.ros2 topic list
 ros2-cli.ros2 topic echo /test/string --once
 ```
@@ -83,4 +83,4 @@ See [KNOWLEDGE_BASE.md](KNOWLEDGE_BASE.md) for the full story.
 
 ## Cross-snap communication
 
-Both snaps need to run as the same user. FastDDS uses shared memory transport by default and SHM segments from one UID can't be read by another, so a snap started by systemd (root) and `ros2-cli` run as a user won't talk to each other. Both snaps ship `fastdds_no_shared_memory.xml` to force UDP instead.
+Both snaps need to run as the same user. FastDDS uses shared memory transport by default and SHM segments from one UID can't be read by another, so a snap started by systemd (root) and `ros2-cli` run as a user won't talk to each other. The `ros2-cli` and `ros2-test-pub-*` snaps all ship `fastdds_no_shared_memory.xml` to force UDP instead.

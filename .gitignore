@@ -8,12 +8,12 @@ snaps/ros2-nav2-snap-humble/
 snaps/**/*.snap
 
 # Snapcraft build artefacts (test-pub snaps live in-tree)
-snaps/ros2-test-pub/overlay/
-snaps/ros2-test-pub/parts/
-snaps/ros2-test-pub/prime/
-snaps/ros2-test-pub/stage/
-snaps/ros2-test-pub/build.log
-snaps/ros2-test-pub/.craft/
+snaps/ros2-test-pub-jazzy/overlay/
+snaps/ros2-test-pub-jazzy/parts/
+snaps/ros2-test-pub-jazzy/prime/
+snaps/ros2-test-pub-jazzy/stage/
+snaps/ros2-test-pub-jazzy/build.log
+snaps/ros2-test-pub-jazzy/.craft/
 snaps/ros2-test-pub-humble/overlay/
 snaps/ros2-test-pub-humble/parts/
 snaps/ros2-test-pub-humble/prime/
