@@ -2,8 +2,10 @@ name: ros2-test-pub-humble
 version: '0.1'
 summary: ROS 2 Humble test publisher snap
 description: |
-  Test publisher for ros2-cli. Publishes /test/string, /test/int32, and /test/twist
-  at 1 Hz. Needs the ros-humble-ros-base content snap connected. Run as a regular user.
+  Test publisher for ros2-test-sub-humble / ros2-cli. Publishes /test/string,
+  /test/int32, and /test/twist at 1 Hz, plus a 2048x2048 sensor_msgs/PointCloud2
+  on /test/pointcloud at 10 Hz (best-effort QoS). Needs the ros-humble-ros-base
+  content snap connected. Run as the same user as the subscriber.
 
 base: core22
 confinement: devmode

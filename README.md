@@ -72,11 +72,16 @@ repo — they're just realistic recipes to point it at.
 ### Bundled minimal publisher and subscriber
 
 `snaps/ros2-test-pub-<distro>/` is a minimal `rclpy` node that
-publishes on `/test/string`, `/test/int32`, and `/test/twist` at 1 Hz.
-`snaps/ros2-test-sub-<distro>/` is the matching subscriber - it
-listens on the same three topics and logs each message it receives.
-Together they form a complete pub/sub example to verify cross-snap ROS
-2 communication on a single host.
+publishes:
+
+- `/test/string`, `/test/int32`, `/test/twist` at 1 Hz (`std_msgs/String`, `Int32`, `geometry_msgs/Twist`)
+- `/test/pointcloud` at 10 Hz — a 2048x2048 (`sensor_msgs/PointCloud2`, XYZ float32, ~48 MiB per message). Best-effort QoS to keep DDS retransmits sane.
+
+`snaps/ros2-test-sub-<distro>/` is the matching subscriber. It listens
+on all four topics and logs each message it receives (the pointcloud is
+logged once per ~10 messages to avoid flooding the journal). Together
+they form a complete pub/sub example to stress-test cross-snap ROS 2
+communication on a single host.
 
 ```bash
 make example-pack-jazzy-test-pub
@@ -86,8 +91,12 @@ make example-pack-jazzy-test-sub
 
 | Snap | Jazzy | Humble | Rolling |
 |------|-------|--------|---------|
-| `ros2-test-pub-<distro>` | 18 MB | 30 MB | 18 MB |
-| `ros2-test-sub-<distro>` | 18 MB | 30 MB | 18 MB |
+| `ros2-test-pub-<distro>` | 24 MB | ~32 MB | 24 MB |
+| `ros2-test-sub-<distro>` | 18 MB | ~30 MB | 18 MB |
+
+The pub snaps stage `python3-numpy` because the publisher builds the
+pointcloud buffer with numpy. The subscriber doesn't touch numpy
+itself and stays smaller.
 
 Rolling packs fine but cannot connect to a content snap at runtime:
 snapcraft 9.0 has no `ros2-rolling` extension and the Snap Store has no

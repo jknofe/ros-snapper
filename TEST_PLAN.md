@@ -56,24 +56,32 @@ sleep 4
 Watch the subscriber's logs:
 
 ```bash
-sudo snap logs -n 20 ros2-test-sub-jazzy
+sudo snap logs -n 40 ros2-test-sub-jazzy
 # expect lines like:
 #   /test/string: 'hello from test snap #N'
 #   /test/int32: N
 #   /test/twist: linear.x=0.NNN, angular.z=0.500
+#   /test/pointcloud #N: 2048x2048 (4194304 points, 48 MiB)
 ```
+
+The pointcloud line appears about once per second (1 in 10 messages
+logged) and confirms that the ~480 MB/s stream is being delivered.
 
 Optional, using `ros2-cli`:
 
 ```bash
 ros2-cli.ros2 topic list
-# should include /test/string, /test/int32, /test/twist
+# should include /test/string, /test/int32, /test/twist, /test/pointcloud
 
 ros2-cli.ros2 topic echo /test/string --once
 # data: 'hello from test snap #N'
 
 timeout 6 ros2-cli.ros2 topic hz /test/string --window 4
 # ~1 Hz
+
+# Use best-effort QoS to subscribe to the pointcloud
+timeout 4 ros2-cli.ros2 topic hz /test/pointcloud --window 8 --qos-reliability best_effort
+# ~10 Hz (may be lower under load)
 ```
 
 ## Cleanup

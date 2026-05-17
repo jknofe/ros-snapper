@@ -3,9 +3,10 @@ version: '0.1'
 summary: ROS 2 Jazzy test subscriber snap
 description: |
   Test subscriber for ros2-test-pub-jazzy. Subscribes to /test/string,
-  /test/int32, and /test/twist and logs each message it receives. Needs
-  the ros-jazzy-ros-base content snap connected. Run as the same user as
-  the publisher.
+  /test/int32, /test/twist, and a 2048x2048 sensor_msgs/PointCloud2 on
+  /test/pointcloud, and logs each message it receives (pointcloud is
+  logged once per ~10 messages). Needs the ros-jazzy-ros-base content
+  snap connected. Run as the same user as the publisher.
 
 base: core24
 confinement: devmode
