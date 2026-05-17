@@ -1,27 +1,28 @@
 # Build notes: ROS 2 snaps with snapcraft inside Docker
 
-Collected pitfalls and fixes from getting snapcraft 9.x to run cleanly inside Docker on top of `ros:<distro>-ros-base`, for Jazzy, Humble, and Rolling. The sizes below are from the example recipes bundled with this repo (`snaps/ros2-test-pub-*`) and the upstream Canonical recipes used as smoke tests (`ros2-cli`, `ros2-nav2`).
+Collected pitfalls and fixes from getting snapcraft 9.x to run cleanly inside Docker on top of `ros:<distro>-ros-base`, for Jazzy and Humble. The sizes below are from the example recipes bundled with this repo (`snaps/ros2-test-{pub,sub}-*`) and the upstream Canonical recipes used as smoke tests (`ros2-cli`, `ros2-nav2`).
+
+Rolling is intentionally out of scope: snapcraft 9.0 has no `ros2-rolling-*` extension and the Snap Store has no `ros-rolling-ros-base` content snap, so the in-snap ROS env can't be assembled with the colcon plugin path the rest of this repo uses.
 
 ## Setup
 
-- OS: Ubuntu 24.04 (Noble) for Jazzy and Rolling containers; Ubuntu 22.04 (Jammy) for Humble
+- OS: Ubuntu 24.04 (Noble) for Jazzy containers; Ubuntu 22.04 (Jammy) for Humble
 - Run as root - snapcraft destructive mode needs write access to `/var/lib/apt/lists/partial`
-- Dockerfile per distro: `Dockerfile.jazzy`, `Dockerfile.humble`, `Dockerfile.rolling`
+- Dockerfile per distro: `Dockerfile.jazzy`, `Dockerfile.humble`
 
 ## Build results
 
-| Distro | Snap | amd64 size |
+| Distro | Snap | arm64 size |
 |--------|------|-----------|
+| Jazzy | ros2-test-pub-jazzy_0.1_arm64.snap | ~95 MB |
+| Jazzy | ros2-test-sub-jazzy_0.1_arm64.snap | ~95 MB |
+| Humble | ros2-test-pub-humble_0.1_arm64.snap | ~95 MB |
+| Humble | ros2-test-sub-humble_0.1_arm64.snap | ~95 MB |
 | Jazzy | ros2-cli_0.32.1_amd64.snap | 176 MB |
 | Jazzy | ros2-nav2_1.3.11_amd64.snap | 769 MB |
-| Jazzy | ros2-test-pub-jazzy_0.1_amd64.snap | 18 MB |
 | Humble | ros2-cli_0.18.11_amd64.snap | 180 MB |
-| Humble | ros2-test-pub-humble_0.1_amd64.snap | ~30 MB |
-| Rolling | ros2-test-pub-rolling_0.1_amd64.snap | 18 MB |
 
-Rolling has no snapcraft extension and no store content snap yet. test-pub builds but can't be tested at runtime.
-
-arm64 results: ros2-cli 168 MB, ros2-nav2 661 MB, ros2-test-pub-jazzy 18 MB (all Jazzy).
+The bundled test-pub/sub snaps are bigger now (~95 MB instead of ~18-30 MB) because they switched from `plugin: nil` to the snapcraft `colcon` plugin + `ros2-<distro>-ros-base` extension. The extension auto-stages a handful of ROS workspace/environment packages so the snap can host its own colcon install at `$SNAP/opt/ros/snap/`. That's the trade-off for getting a standard colcon workspace inside the snap.
 
 ## Container capability audit
 
@@ -157,17 +158,15 @@ Linux hosts don't need the workaround (the bind mount supports xattrs natively),
 
 ---
 
-### Rolling has no snap packaging infrastructure yet
+### snapcraft 9.0 expects `extensions:` per app, not at the top level
 
-snapcraft 9.0.0 has no `ros2-rolling-*` extension (only jazzy and humble). The Snap Store has no `ros-rolling-ros-base` content snap. The canonical/ros2cli-snap repo has no rolling branch (master tracks foxy).
-
-Dockerfile.rolling builds and snapcraft works, but you can only build content-snap-free snaps. ros2-test-pub-rolling builds but can't connect to a content snap at runtime.
+In older versions you could put `extensions: [ros2-jazzy-ros-base]` at the snapcraft.yaml root. Snapcraft 9.0 rejects this with `extra inputs are not permitted (in field 'has-base.core24.extensions')`. The extension must live on each `apps:` entry. If you have multiple apps, repeat the extension on each one.
 
 ---
 
-### Humble test-pub snap needs python3-numpy staged
+### ament setup files trip snapcraft's `set -u` (only matters if you bypass the colcon plugin)
 
-The `ros-humble-ros-base` content snap's `geometry_msgs` imports numpy at import time. Unlike jazzy, numpy is not available through the underlay's dist-packages alone. Stage `python3-numpy` in the test-pub snap and add `$UNDERLAY/usr/lib/python3/dist-packages` to the snap's PYTHONPATH in `launch.sh`.
+`/opt/ros/<distro>/setup.bash` references `AMENT_TRACE_SETUP_FILES` without `${VAR:-}` guarding. snapcraft runs `override-build` under `set -euo pipefail` and bails on `AMENT_TRACE_SETUP_FILES: unbound variable`. Workaround when sourcing it directly: `set +u && . /opt/ros/.../setup.bash && set -u`. The colcon plugin handles this internally; the issue only shows up if you reach for `plugin: nil` instead.
 
 ---
 

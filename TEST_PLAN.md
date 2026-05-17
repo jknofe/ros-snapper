@@ -7,8 +7,7 @@ the Canonical `ros2-cli` example to poke at the topics from the
 command line.
 
 The same flow works for Humble by swapping `jazzy` for `humble` in
-every target and content-snap name. Rolling builds but has no usable
-content snap yet, so runtime testing is not possible there.
+every target and content-snap name.
 
 snapd is required, so this only runs on Linux (or a Linux VM).
 
@@ -43,24 +42,31 @@ snap connections ros2-test-sub-jazzy   # ros-jazzy-ros-base connected
 
 ## Run
 
-Start the subscriber, then the publisher. Both must run under the same
-user (see "Cross-snap ROS 2 communication" in the README).
+Each snap exposes two apps: `simple` (std_msgs/geometry_msgs at 1 Hz)
+and `pointcloud` (sensor_msgs/PointCloud2 at 10 Hz). Start the
+subscribers first, then the publishers. All four apps must run under
+the same user (see "Cross-snap ROS 2 communication" in the README).
 
 ```bash
-ros2-test-sub-jazzy.sub &
+ros2-test-sub-jazzy.simple &
+ros2-test-sub-jazzy.pointcloud &
 sleep 2
-ros2-test-pub-jazzy.pub &
+ros2-test-pub-jazzy.simple &
+ros2-test-pub-jazzy.pointcloud &
 sleep 4
 ```
 
-Watch the subscriber's logs:
+Watch the subscribers' logs:
 
 ```bash
-sudo snap logs -n 40 ros2-test-sub-jazzy
+sudo snap logs -n 40 ros2-test-sub-jazzy.simple
 # expect lines like:
 #   /test/string: 'hello from test snap #N'
 #   /test/int32: N
 #   /test/twist: linear.x=0.NNN, angular.z=0.500
+
+sudo snap logs -n 20 ros2-test-sub-jazzy.pointcloud
+# expect lines like:
 #   /test/pointcloud #N: 2048x2048 (4194304 points, 48 MiB)
 ```
 

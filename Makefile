@@ -1,14 +1,13 @@
 .PHONY: help \
-  build-image-jazzy build-image-humble build-image-rolling \
-  start-builder-jazzy start-builder-humble start-builder-rolling \
-  stop-builder-jazzy stop-builder-humble stop-builder-rolling \
-  pack-jazzy pack-humble pack-rolling \
+  build-image-jazzy build-image-humble \
+  start-builder-jazzy start-builder-humble \
+  stop-builder-jazzy stop-builder-humble \
+  pack-jazzy pack-humble \
   example-clone-jazzy example-clone-humble \
   example-pack-jazzy-ros2-cli example-pack-jazzy-ros2-nav2 \
   example-pack-jazzy-test-pub example-pack-jazzy-test-sub \
   example-pack-humble-ros2-cli example-pack-humble-ros2-nav2 \
-  example-pack-humble-test-pub example-pack-humble-test-sub \
-  example-pack-rolling-test-pub example-pack-rolling-test-sub
+  example-pack-humble-test-pub example-pack-humble-test-sub
 
 # scripts/pack-snap.sh is invoked inside the container. It copies the recipe
 # into /build/<recipe>, runs snapcraft there, and copies the .snap back to the
@@ -29,7 +28,7 @@ help:
 	@echo "  make example-pack-<distro>-ros2-cli   pack canonical ros2-cli"
 	@echo "  make example-pack-<distro>-ros2-nav2  pack canonical ros2-nav2"
 	@echo ""
-	@echo "<distro> = jazzy | humble | rolling"
+	@echo "<distro> = jazzy | humble"
 
 # ============================================================================
 # Core build flow — generic; works for any recipe at snaps/<SNAP>/
@@ -64,24 +63,6 @@ stop-builder-humble:
 pack-humble:
 	@test -n "$(SNAP)" || { echo "usage: make pack-humble SNAP=<recipe-dir>"; exit 2; }
 	docker exec snap-builder-humble $(PACK) $(SNAP)
-
-# Rolling: snapcraft 9.0 has no ros2-rolling extension and the store has no
-# ros-rolling-ros-base content snap. Snaps that depend on a content snap
-# pack fine but cannot be connected at runtime.
-build-image-rolling:
-	docker build -f Dockerfile.rolling -t ros-snapcraft-rolling .
-
-start-builder-rolling:
-	docker run -d --name snap-builder-rolling \
-	  -v "$(CURDIR)/snaps:/workspace" \
-	  ros-snapcraft-rolling tail -f /dev/null
-
-stop-builder-rolling:
-	docker rm -f snap-builder-rolling
-
-pack-rolling:
-	@test -n "$(SNAP)" || { echo "usage: make pack-rolling SNAP=<recipe-dir>"; exit 2; }
-	docker exec snap-builder-rolling $(PACK) $(SNAP)
 
 # ============================================================================
 # Examples — convenience targets for the bundled in-tree publishers and the
@@ -122,9 +103,3 @@ example-pack-humble-test-pub:
 
 example-pack-humble-test-sub:
 	docker exec snap-builder-humble $(PACK) ros2-test-sub-humble
-
-example-pack-rolling-test-pub:
-	docker exec snap-builder-rolling $(PACK) ros2-test-pub-rolling
-
-example-pack-rolling-test-sub:
-	docker exec snap-builder-rolling $(PACK) ros2-test-sub-rolling

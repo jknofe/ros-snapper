@@ -1,4 +1,4 @@
-# Upstream snap recipes (cloned by `make clone-snaps-<distro>`)
+# Upstream snap recipes (cloned by `make example-clone-<distro>`)
 snaps/ros2cli-snap-jazzy/
 snaps/ros2cli-snap-humble/
 snaps/ros2-nav2-snap-jazzy/
@@ -7,7 +7,7 @@ snaps/ros2-nav2-snap-humble/
 # Built snap packages
 snaps/**/*.snap
 
-# Snapcraft build artefacts (test-pub snaps live in-tree)
+# Snapcraft build artefacts (test-pub/sub snaps live in-tree)
 snaps/ros2-test-pub-jazzy/overlay/
 snaps/ros2-test-pub-jazzy/parts/
 snaps/ros2-test-pub-jazzy/prime/
@@ -20,12 +20,6 @@ snaps/ros2-test-pub-humble/prime/
 snaps/ros2-test-pub-humble/stage/
 snaps/ros2-test-pub-humble/build.log
 snaps/ros2-test-pub-humble/.craft/
-snaps/ros2-test-pub-rolling/overlay/
-snaps/ros2-test-pub-rolling/parts/
-snaps/ros2-test-pub-rolling/prime/
-snaps/ros2-test-pub-rolling/stage/
-snaps/ros2-test-pub-rolling/build.log
-snaps/ros2-test-pub-rolling/.craft/
 snaps/ros2-test-sub-jazzy/overlay/
 snaps/ros2-test-sub-jazzy/parts/
 snaps/ros2-test-sub-jazzy/prime/
@@ -38,11 +32,5 @@ snaps/ros2-test-sub-humble/prime/
 snaps/ros2-test-sub-humble/stage/
 snaps/ros2-test-sub-humble/build.log
 snaps/ros2-test-sub-humble/.craft/
-snaps/ros2-test-sub-rolling/overlay/
-snaps/ros2-test-sub-rolling/parts/
-snaps/ros2-test-sub-rolling/prime/
-snaps/ros2-test-sub-rolling/stage/
-snaps/ros2-test-sub-rolling/build.log
-snaps/ros2-test-sub-rolling/.craft/
 
 .tmp/
