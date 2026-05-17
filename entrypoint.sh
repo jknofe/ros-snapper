@@ -1,18 +1,9 @@
 #!/bin/bash
+# Set up the ROS environment for whatever command runs inside the container.
+# The build flow is driven from outside via "docker exec ... pack-snap <recipe>"
+# (see scripts/pack-snap.sh and the Makefile), so this entrypoint stays small.
 set -e
 
 source /opt/ros/${ROS_DISTRO}/setup.bash
 
-export SNAPCRAFT_BUILD_ENVIRONMENT=host
-export SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS=1
-
-if [ -f /workspace/snap/snapcraft.yaml ]; then
-    cd /workspace
-else
-    echo "No snapcraft.yaml found at /workspace/snap/snapcraft.yaml"
-    echo "Mount a snap project into /workspace or use: docker run ... bash"
-    exec "$@"
-    exit 0
-fi
-
-exec snapcraft pack
+exec "$@"

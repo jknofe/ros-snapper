@@ -1,19 +1,24 @@
-# Test: ros2-cli + ros2-test-pub-jazzy (amd64)
+# Smoke test: ros2-cli + ros2-test-pub-jazzy (Linux, amd64)
 
-Verifies that the two snaps can talk to each other over ROS 2 topics.
+End-to-end check that two snaps built with this toolchain can talk to
+each other over ROS 2 topics. Both recipes are example recipes shipped
+with the repo — this is not a test of a production app, it's a test of
+the build flow.
 
-The same flow works for Humble by swapping `jazzy` for `humble` in every
-target and content-snap name. Rolling builds but has no usable content snap
-yet, so runtime testing is not possible.
+The same flow works for Humble by swapping `jazzy` for `humble` in
+every target and content-snap name. Rolling builds but has no usable
+content snap yet, so runtime testing is not possible there.
+
+snapd is required, so this only runs on Linux (or a Linux VM).
 
 ## Build and install
 
 ```bash
 make build-image-jazzy
-make clone-snaps-jazzy
+make example-clone-jazzy
 make start-builder-jazzy
-make build-jazzy-ros2-cli
-make build-jazzy-test-pub
+make example-pack-jazzy-ros2-cli
+make example-pack-jazzy-test-pub
 
 sudo snap install --dangerous snaps/ros2cli-snap-jazzy/ros2-cli_*.snap
 sudo snap install --dangerous --devmode snaps/ros2-test-pub-jazzy/ros2-test-pub-jazzy_*.snap

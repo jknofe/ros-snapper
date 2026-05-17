@@ -1,6 +1,6 @@
 # Build notes: ROS 2 snaps with snapcraft inside Docker
 
-Collected pitfalls and fixes from building ROS 2 snaps on Jazzy, Humble, and Rolling.
+Collected pitfalls and fixes from getting snapcraft 9.x to run cleanly inside Docker on top of `ros:<distro>-ros-base`, for Jazzy, Humble, and Rolling. The sizes below are from the example recipes bundled with this repo (`snaps/ros2-test-pub-*`) and the upstream Canonical recipes used as smoke tests (`ros2-cli`, `ros2-nav2`).
 
 ## Setup
 
@@ -171,12 +171,15 @@ The `ros-humble-ros-base` content snap's `geometry_msgs` imports numpy at import
 
 ---
 
-## Snap recipes
+## Example snap recipes shipped with the repo
 
-- Jazzy ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch jazzy)
-- Humble ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch humble)
-- ros2-nav2: unmodified from https://github.com/canonical/ros2-nav2-snap
-- ros2-test-pub variants: in `snaps/ros2-test-pub-jazzy/`, `snaps/ros2-test-pub-humble/`, `snaps/ros2-test-pub-rolling/`
+The repo bundles two kinds of example recipes used only to smoke-test the build flow. Your own snap recipe does not need to follow either layout.
+
+- `snaps/ros2-test-pub-jazzy/`, `snaps/ros2-test-pub-humble/`, `snaps/ros2-test-pub-rolling/` — minimal in-tree publishers, owned by this repo.
+- Upstream Canonical recipes, cloned by `make example-clone-<distro>`:
+  - Jazzy ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch jazzy)
+  - Humble ros2cli: unmodified from https://github.com/canonical/ros2cli-snap (branch humble)
+  - ros2-nav2: unmodified from https://github.com/canonical/ros2-nav2-snap
 
 ---
 
