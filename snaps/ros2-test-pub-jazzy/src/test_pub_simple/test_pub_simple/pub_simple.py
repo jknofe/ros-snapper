@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Minimal publisher for /test/string, /test/int32, /test/twist at 1 Hz."""
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import String, Int32
 from geometry_msgs.msg import Twist
@@ -42,11 +43,10 @@ def main():
     node = SimplePublisher()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    node.destroy_node()
+    rclpy.try_shutdown()
 
 
 if __name__ == '__main__':

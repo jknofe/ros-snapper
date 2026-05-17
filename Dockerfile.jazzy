@@ -77,8 +77,9 @@ ENV SNAPCRAFT_BUILD_ENVIRONMENT=host \
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
 
 COPY entrypoint.sh /entrypoint.sh
-COPY scripts/pack-snap.sh /usr/local/bin/pack-snap
-RUN chmod +x /entrypoint.sh /usr/local/bin/pack-snap
+COPY scripts/pack-snap.sh   /usr/local/bin/pack-snap
+COPY scripts/test-snap.sh   /usr/local/bin/test-snap
+RUN chmod +x /entrypoint.sh /usr/local/bin/pack-snap /usr/local/bin/test-snap
 
 WORKDIR /workspace
 

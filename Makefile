@@ -3,6 +3,7 @@
   start-builder-jazzy start-builder-humble \
   stop-builder-jazzy stop-builder-humble \
   pack-jazzy pack-humble \
+  test-jazzy \
   example-clone-jazzy example-clone-humble \
   example-pack-jazzy-ros2-cli example-pack-jazzy-ros2-nav2 \
   example-pack-jazzy-test-pub example-pack-jazzy-test-sub \
@@ -20,6 +21,9 @@ help:
 	@echo "  make start-builder-<distro>           run the build container"
 	@echo "  make pack-<distro> SNAP=<NAME>        pack snaps/<NAME>/"
 	@echo "  make stop-builder-<distro>            remove the build container"
+	@echo ""
+	@echo "Test (no snapd required — unsquashes snaps and runs nodes in-container):"
+	@echo "  make test-jazzy                       run jazzy pub+sub inside the builder"
 	@echo ""
 	@echo "Bundled examples (smoke-test the toolchain):"
 	@echo "  make example-pack-<distro>-test-pub   bundled minimal publisher"
@@ -63,6 +67,9 @@ stop-builder-humble:
 pack-humble:
 	@test -n "$(SNAP)" || { echo "usage: make pack-humble SNAP=<recipe-dir>"; exit 2; }
 	docker exec snap-builder-humble $(PACK) $(SNAP)
+
+test-jazzy:
+	docker exec snap-builder-jazzy test-snap
 
 # ============================================================================
 # Examples — convenience targets for the bundled in-tree publishers and the
