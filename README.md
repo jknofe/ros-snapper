@@ -77,6 +77,7 @@ Each Dockerfile adds snapcraft 9.x (not on PyPI, installed from GitHub) on top o
 - The ROS apt source is deleted after package install so craft_parts can own it without a key conflict.
 - `PYTHONPATH` is set to expose the host's dist-packages to the staged python3 that snapcraft downloads, which otherwise can't see catkin_pkg, empy, or numpy.
 - Humble (Ubuntu 22.04) and Rolling (Ubuntu 24.04 with ROS deps) install old system packages that conflict with snapcraft's pydantic_core and pyparsing. Fixed by appending a sys.path reordering block to `/usr/lib/python3.X/sitecustomize.py` so the venv's packages take priority.
+- snapcraft is run inside the container's writable layer (`/build/<recipe>`) by `scripts/pack-snap.sh`, not directly on the host bind mount. macOS Docker Desktop drops Linux user xattrs across the file-sharing bridge, and craft_parts writes those on every staged file - building in-container sidesteps the issue and is a no-op on Linux hosts.
 
 See [KNOWLEDGE_BASE.md](KNOWLEDGE_BASE.md) for the full story.
 

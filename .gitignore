@@ -1,10 +1,13 @@
-snaps/ros2cli-snap/
+# Upstream snap recipes (cloned by `make clone-snaps-<distro>`)
 snaps/ros2cli-snap-jazzy/
 snaps/ros2cli-snap-humble/
-snaps/ros2-nav2-snap/
 snaps/ros2-nav2-snap-jazzy/
 snaps/ros2-nav2-snap-humble/
+
+# Built snap packages
 snaps/**/*.snap
+
+# Snapcraft build artefacts (test-pub snaps live in-tree)
 snaps/ros2-test-pub/overlay/
 snaps/ros2-test-pub/parts/
 snaps/ros2-test-pub/prime/
@@ -23,4 +26,5 @@ snaps/ros2-test-pub-rolling/prime/
 snaps/ros2-test-pub-rolling/stage/
 snaps/ros2-test-pub-rolling/build.log
 snaps/ros2-test-pub-rolling/.craft/
+
 .tmp/

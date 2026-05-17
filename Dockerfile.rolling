@@ -77,7 +77,8 @@ ENV SNAPCRAFT_BUILD_ENVIRONMENT=host \
 RUN echo "source /opt/ros/rolling/setup.bash" >> /root/.bashrc
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY scripts/pack-snap.sh /usr/local/bin/pack-snap
+RUN chmod +x /entrypoint.sh /usr/local/bin/pack-snap
 
 WORKDIR /workspace
 

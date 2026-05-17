@@ -1,12 +1,17 @@
 .PHONY: \
   build-image-jazzy build-image-humble build-image-rolling \
-  clone-snaps-jazzy clone-snaps-humble clone-snaps-rolling \
+  clone-snaps-jazzy clone-snaps-humble \
   start-builder-jazzy start-builder-humble start-builder-rolling \
   stop-builder-jazzy stop-builder-humble stop-builder-rolling \
   build-jazzy-ros2-cli build-jazzy-ros2-nav2 build-jazzy-test-pub \
   build-humble-ros2-cli build-humble-ros2-nav2 build-humble-test-pub \
-  build-rolling-ros2-cli build-rolling-test-pub \
+  build-rolling-test-pub \
   all-jazzy all-humble all-rolling
+
+# Build inside the container's local filesystem, not on the host bind mount.
+# craft_parts writes user.* xattrs on staged files, which the macOS Docker
+# Desktop bind-mount bridge does not support. See scripts/pack-snap.sh.
+PACK = pack-snap
 
 # ---------- jazzy ----------
 
@@ -27,16 +32,13 @@ stop-builder-jazzy:
 	docker rm -f snap-builder-jazzy
 
 build-jazzy-ros2-cli:
-	docker exec snap-builder-jazzy bash -c \
-	  'cd /workspace/ros2cli-snap-jazzy && snapcraft pack 2>&1 | tee /workspace/ros2cli-snap-jazzy/build.log; exit $${PIPESTATUS[0]}'
+	docker exec snap-builder-jazzy $(PACK) ros2cli-snap-jazzy
 
 build-jazzy-ros2-nav2:
-	docker exec snap-builder-jazzy bash -c \
-	  'cd /workspace/ros2-nav2-snap-jazzy && snapcraft pack 2>&1 | tee /workspace/ros2-nav2-snap-jazzy/build.log; exit $${PIPESTATUS[0]}'
+	docker exec snap-builder-jazzy $(PACK) ros2-nav2-snap-jazzy
 
 build-jazzy-test-pub:
-	docker exec snap-builder-jazzy bash -c \
-	  'cd /workspace/ros2-test-pub && snapcraft pack 2>&1 | tee /workspace/ros2-test-pub/build.log; exit $${PIPESTATUS[0]}'
+	docker exec snap-builder-jazzy $(PACK) ros2-test-pub
 
 all-jazzy: build-image-jazzy clone-snaps-jazzy start-builder-jazzy build-jazzy-ros2-cli build-jazzy-test-pub
 
@@ -59,16 +61,13 @@ stop-builder-humble:
 	docker rm -f snap-builder-humble
 
 build-humble-ros2-cli:
-	docker exec snap-builder-humble bash -c \
-	  'cd /workspace/ros2cli-snap-humble && snapcraft pack 2>&1 | tee /workspace/ros2cli-snap-humble/build.log; exit $${PIPESTATUS[0]}'
+	docker exec snap-builder-humble $(PACK) ros2cli-snap-humble
 
 build-humble-ros2-nav2:
-	docker exec snap-builder-humble bash -c \
-	  'cd /workspace/ros2-nav2-snap-humble && snapcraft pack 2>&1 | tee /workspace/ros2-nav2-snap-humble/build.log; exit $${PIPESTATUS[0]}'
+	docker exec snap-builder-humble $(PACK) ros2-nav2-snap-humble
 
 build-humble-test-pub:
-	docker exec snap-builder-humble bash -c \
-	  'cd /workspace/ros2-test-pub-humble && snapcraft pack 2>&1 | tee /workspace/ros2-test-pub-humble/build.log; exit $${PIPESTATUS[0]}'
+	docker exec snap-builder-humble $(PACK) ros2-test-pub-humble
 
 all-humble: build-image-humble clone-snaps-humble start-builder-humble build-humble-ros2-cli build-humble-test-pub
 
@@ -89,7 +88,6 @@ stop-builder-rolling:
 	docker rm -f snap-builder-rolling
 
 build-rolling-test-pub:
-	docker exec snap-builder-rolling bash -c \
-	  'cd /workspace/ros2-test-pub-rolling && snapcraft pack 2>&1 | tee /workspace/ros2-test-pub-rolling/build.log; exit $${PIPESTATUS[0]}'
+	docker exec snap-builder-rolling $(PACK) ros2-test-pub-rolling
 
 all-rolling: build-image-rolling start-builder-rolling build-rolling-test-pub

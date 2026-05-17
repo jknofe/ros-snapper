@@ -1,16 +1,21 @@
-# Test: ros2-cli + ros2-test-pub (amd64)
+# Test: ros2-cli + ros2-test-pub (Jazzy, amd64)
 
 Verifies that the two snaps can talk to each other over ROS 2 topics.
+
+The same flow works for Humble by swapping `jazzy` for `humble` in every
+target and content-snap name. Rolling builds but has no usable content snap
+yet, so runtime testing is not possible.
 
 ## Build and install
 
 ```bash
-make build-image
-make start-builder
-make build-ros2-cli
-make build-test-pub
+make build-image-jazzy
+make clone-snaps-jazzy
+make start-builder-jazzy
+make build-jazzy-ros2-cli
+make build-jazzy-test-pub
 
-sudo snap install --dangerous snaps/ros2cli-snap/ros2-cli_*.snap
+sudo snap install --dangerous snaps/ros2cli-snap-jazzy/ros2-cli_*.snap
 sudo snap install --dangerous --devmode snaps/ros2-test-pub/ros2-test-pub_*.snap
 sudo snap connect ros2-test-pub:ros-jazzy-ros-base ros-jazzy-ros-base:ros-jazzy-ros-base
 ```
@@ -38,12 +43,12 @@ ros2-cli.ros2 topic echo /test/twist --once
 # linear.x non-zero, angular.z 0.5
 
 timeout 6 ros2-cli.ros2 topic hz /test/string --window 4
-# ~2 Hz
+# ~1 Hz
 ```
 
 ## Results (2026-05-16, amd64, snapd 2.74.1)
 
-All checks passed. Topics visible, echo returned messages, hz reported ~2 Hz.
+All checks passed. Topics visible, echo returned messages, hz reported ~1 Hz.
 
 ## Cleanup
 

@@ -141,6 +141,22 @@ Installing the `snapd` package is enough - no daemon, no stub script needed. Thi
 
 ---
 
+### macOS bind mounts can't hold Linux user xattrs
+
+craft_parts tags every staged file with a `user.craft_parts.origin_stage_package` xattr to track which stage-package contributed it. Linux native filesystems handle this fine, but Docker Desktop on macOS bridges bind mounts to APFS through gRPC-FUSE/VirtioFS, which silently rejects Linux user xattrs. The first extracted shared library crashes the build:
+
+```
+Unable to write extended attribute.
+Failed to write attribute 'user.craft_parts.origin_stage_package' on
+'/workspace/.../libssl.so.3'
+```
+
+Fix: run snapcraft inside the container's writable layer (under `/build/<recipe>`) and copy only the resulting `.snap` back to the host mount. `scripts/pack-snap.sh` does this and every Makefile build target invokes it via `docker exec snap-builder-<distro> pack-snap <recipe-dir>`.
+
+Linux hosts don't need the workaround (the bind mount supports xattrs natively), but the helper has zero cost there and keeps a single code path for both.
+
+---
+
 ### Rolling has no snap packaging infrastructure yet
 
 snapcraft 9.0.0 has no `ros2-rolling-*` extension (only jazzy and humble). The Snap Store has no `ros-rolling-ros-base` content snap. The canonical/ros2cli-snap repo has no rolling branch (master tracks foxy).
