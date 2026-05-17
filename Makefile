@@ -4,9 +4,11 @@
   stop-builder-jazzy stop-builder-humble stop-builder-rolling \
   pack-jazzy pack-humble pack-rolling \
   example-clone-jazzy example-clone-humble \
-  example-pack-jazzy-ros2-cli example-pack-jazzy-ros2-nav2 example-pack-jazzy-test-pub \
-  example-pack-humble-ros2-cli example-pack-humble-ros2-nav2 example-pack-humble-test-pub \
-  example-pack-rolling-test-pub
+  example-pack-jazzy-ros2-cli example-pack-jazzy-ros2-nav2 \
+  example-pack-jazzy-test-pub example-pack-jazzy-test-sub \
+  example-pack-humble-ros2-cli example-pack-humble-ros2-nav2 \
+  example-pack-humble-test-pub example-pack-humble-test-sub \
+  example-pack-rolling-test-pub example-pack-rolling-test-sub
 
 # scripts/pack-snap.sh is invoked inside the container. It copies the recipe
 # into /build/<recipe>, runs snapcraft there, and copies the .snap back to the
@@ -22,6 +24,7 @@ help:
 	@echo ""
 	@echo "Bundled examples (smoke-test the toolchain):"
 	@echo "  make example-pack-<distro>-test-pub   bundled minimal publisher"
+	@echo "  make example-pack-<distro>-test-sub   bundled minimal subscriber"
 	@echo "  make example-clone-<distro>           clone canonical ros2-cli + ros2-nav2"
 	@echo "  make example-pack-<distro>-ros2-cli   pack canonical ros2-cli"
 	@echo "  make example-pack-<distro>-ros2-nav2  pack canonical ros2-nav2"
@@ -100,6 +103,9 @@ example-pack-jazzy-ros2-nav2:
 example-pack-jazzy-test-pub:
 	docker exec snap-builder-jazzy $(PACK) ros2-test-pub-jazzy
 
+example-pack-jazzy-test-sub:
+	docker exec snap-builder-jazzy $(PACK) ros2-test-sub-jazzy
+
 example-clone-humble:
 	mkdir -p snaps
 	[ -d snaps/ros2cli-snap-humble ]   || git clone --branch humble https://github.com/canonical/ros2cli-snap   snaps/ros2cli-snap-humble
@@ -114,5 +120,11 @@ example-pack-humble-ros2-nav2:
 example-pack-humble-test-pub:
 	docker exec snap-builder-humble $(PACK) ros2-test-pub-humble
 
+example-pack-humble-test-sub:
+	docker exec snap-builder-humble $(PACK) ros2-test-sub-humble
+
 example-pack-rolling-test-pub:
 	docker exec snap-builder-rolling $(PACK) ros2-test-pub-rolling
+
+example-pack-rolling-test-sub:
+	docker exec snap-builder-rolling $(PACK) ros2-test-sub-rolling

@@ -69,21 +69,25 @@ Three minimal in-tree recipes and two upstream Canonical recipes are
 bundled to smoke-test the toolchain. They are not the point of this
 repo — they're just realistic recipes to point it at.
 
-### Bundled minimal publishers
+### Bundled minimal publisher and subscriber
 
-`snaps/ros2-test-pub-<distro>/` contains a minimal `rclpy` node that
+`snaps/ros2-test-pub-<distro>/` is a minimal `rclpy` node that
 publishes on `/test/string`, `/test/int32`, and `/test/twist` at 1 Hz.
-Used to verify cross-snap ROS 2 communication.
+`snaps/ros2-test-sub-<distro>/` is the matching subscriber - it
+listens on the same three topics and logs each message it receives.
+Together they form a complete pub/sub example to verify cross-snap ROS
+2 communication on a single host.
 
 ```bash
 make example-pack-jazzy-test-pub
-make example-pack-humble-test-pub
-make example-pack-rolling-test-pub
+make example-pack-jazzy-test-sub
+# humble and rolling variants exist too
 ```
 
 | Snap | Jazzy | Humble | Rolling |
 |------|-------|--------|---------|
 | `ros2-test-pub-<distro>` | 18 MB | 30 MB | 18 MB |
+| `ros2-test-sub-<distro>` | 18 MB | 30 MB | 18 MB |
 
 Rolling packs fine but cannot connect to a content snap at runtime:
 snapcraft 9.0 has no `ros2-rolling` extension and the Snap Store has no
@@ -106,19 +110,20 @@ Humble equivalents exist too (`make example-clone-humble`,
 `make example-pack-humble-ros2-cli`, …). Canonical does not publish a
 rolling branch.
 
-### Smoke test: ros2-cli + test-pub talking to each other
+### Smoke test: pub talking to sub (and to ros2-cli)
 
-See [TEST_PLAN.md](TEST_PLAN.md) for installing both example snaps on a
-Linux host and verifying topic flow.
+See [TEST_PLAN.md](TEST_PLAN.md) for installing the two bundled snaps
+(and optionally the Canonical `ros2-cli`) on a Linux host and verifying
+end-to-end topic flow.
 
 ## Cross-snap ROS 2 communication
 
 This is a runtime concern, not a build concern, but worth noting if you
 follow the smoke test:
 
-Both snaps need to run as the same user. FastDDS uses shared-memory
-transport by default and SHM segments from one UID can't be read by
-another, so a snap started by systemd (root) and `ros2-cli` run as a
-user won't talk to each other. The bundled `ros2-test-pub-*` snaps and
-the Canonical `ros2-cli` example all ship `fastdds_no_shared_memory.xml`
-to force UDP instead.
+All cooperating snaps need to run as the same user. FastDDS uses
+shared-memory transport by default and SHM segments from one UID can't
+be read by another, so a snap started by systemd (root) and a user-run
+client won't talk to each other. The bundled `ros2-test-pub-*` and
+`ros2-test-sub-*` snaps and the Canonical `ros2-cli` example all ship
+`fastdds_no_shared_memory.xml` to force UDP instead.

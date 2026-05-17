@@ -26,5 +26,23 @@ snaps/ros2-test-pub-rolling/prime/
 snaps/ros2-test-pub-rolling/stage/
 snaps/ros2-test-pub-rolling/build.log
 snaps/ros2-test-pub-rolling/.craft/
+snaps/ros2-test-sub-jazzy/overlay/
+snaps/ros2-test-sub-jazzy/parts/
+snaps/ros2-test-sub-jazzy/prime/
+snaps/ros2-test-sub-jazzy/stage/
+snaps/ros2-test-sub-jazzy/build.log
+snaps/ros2-test-sub-jazzy/.craft/
+snaps/ros2-test-sub-humble/overlay/
+snaps/ros2-test-sub-humble/parts/
+snaps/ros2-test-sub-humble/prime/
+snaps/ros2-test-sub-humble/stage/
+snaps/ros2-test-sub-humble/build.log
+snaps/ros2-test-sub-humble/.craft/
+snaps/ros2-test-sub-rolling/overlay/
+snaps/ros2-test-sub-rolling/parts/
+snaps/ros2-test-sub-rolling/prime/
+snaps/ros2-test-sub-rolling/stage/
+snaps/ros2-test-sub-rolling/build.log
+snaps/ros2-test-sub-rolling/.craft/
 
 .tmp/
